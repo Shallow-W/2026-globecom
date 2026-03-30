@@ -52,14 +52,16 @@ class Simulator:
             # 1. 流量生成
             requests_by_node = self.traffic_gen.generate_slot(t, self.traffic_mode)
 
-            # 2. 更新节点到达率
+            # 2. 更新节点到达率（使用配置的ar值，保持恒定）
+            # Poisson随机性已经体现在实际请求数上，lambda保持为配置的固定值
             for nid, node in self.topology.nodes.items():
                 if nid in requests_by_node:
                     node.lambda_arrival = len(requests_by_node[nid]) / cfg.slot_duration_s
                 else:
-                    node.lambda_arrival = max(0.0, node.lambda_arrival - 5.0)
+                    node.lambda_arrival = self.traffic_gen._override_lambda or cfg.lambda_base
 
             # 3. 预计算每节点每任务的候选架构（每时隙只过滤一次，避免重复遍历 4096 行）
+            # 注意：对于baseline，已部署的固定模型应始终可用，即使当前负载很高
             slot_candidates: Dict[Tuple[int, str], List] = {}
             for nid, node in self.topology.nodes.items():
                 if node.node_type != 'edge':
@@ -67,6 +69,10 @@ class Simulator:
                 for task_name in self.tasks:
                     try:
                         cands = self.deploy_algo.filter_candidates(node, task_name, t, self.tables)
+                        # 确保已部署的固定模型也在候选列表中（用于baseline的固定模型）
+                        deployed = self.deploy_algo.deployed_models.get((nid, task_name))
+                        if deployed and deployed not in cands:
+                            cands = cands + [deployed]
                         slot_candidates[(nid, task_name)] = cands
                     except Exception:
                         slot_candidates[(nid, task_name)] = []
@@ -88,10 +94,10 @@ class Simulator:
 
                     if target_node is None or arch is None:
                         self.stats['failed_requests'] += 1
-                        # 失败请求计入超时惩罚时延（按SLA值）
-                        T_SLA = cfg.T_SLA_jigsaw_ms if task == 'jigsaw' else cfg.T_SLA_ms
-                        self.stats['total_latency_ms'] += T_SLA
-                        self.stats['latencies'].append(T_SLA)
+                        # 失败请求计入5s超时惩罚时延
+                        TIMEOUT_MS = 5000.0
+                        self.stats['total_latency_ms'] += TIMEOUT_MS
+                        self.stats['latencies'].append(TIMEOUT_MS)
                         continue
 
                     # 缓存/拉取处理
@@ -110,14 +116,9 @@ class Simulator:
                         target_node.deployed_archs.append(arch['arch_id'])
                         target_node.used_memory_mb += arch['params'] / (1024 * 1024)
 
-                    # 服务时延（M/M/1 排队模型）
-                    mu = target_node.gflops / (arch['flops'] / 1e9)
-                    lam = max(target_node.lambda_arrival, 0.1)
-                    if mu > lam:
-                        T_service = 1000.0 / (mu - lam)
-                    else:
-                        T_service = 10000.0  # 不稳定区惩罚值
-                    total_latency = route_delay + T_service
+                    # 总延迟直接使用 route_delay（已包含 L_topo + T_queue）
+                    # 避免重复计算 T_queue
+                    total_latency = route_delay
 
                     # SLA 检查
                     T_SLA = cfg.T_SLA_jigsaw_ms if task == 'jigsaw' else cfg.T_SLA_ms

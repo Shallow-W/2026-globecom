@@ -59,28 +59,20 @@ class DeploymentAlgorithm:
 
     def compute_F_max(self, node: Node, t: int, task: str = None) -> float:
         """
-        动态算力红线（论文核心公式）
+        动态算力红线（基于稳定性约束）
 
-        正确的 SLA 约束应该是：
-        T_total = T_queue + T_service = 1/(μ-λ) + 1/μ <= T_SLA
+        稳定性条件: μ > λ (服务率大于到达率)
+        即: C / F > λ  =>  F < C / λ
 
-        解这个不等式得到：
-        μ >= (λ + 1/T_SLA + sqrt((λ + 1/T_SLA)² + 4λ/T_SLA)) / 2
-
-        所以最大允许的模型 FLOPs:
-        F_max = C / μ_min = C * 2 / (λ + 1/T_SLA + sqrt((λ + 1/T_SLA)² + 4λ/T_SLA))
+        当 λ 很小时，允许较大的模型；当 λ 增大时，只允许小模型。
         """
         lam = node.lambda_arrival
         if lam <= 0:
-            lam = 0.1
-        T_sla_s = self._get_T_SLA(task) / 1000.0
+            lam = 0.1  # 防止除零
 
-        # 精确 SLA 约束公式
-        term = (lam + 1.0/T_sla_s)**2 + 4*lam/T_sla_s
-        mu_min = (lam + 1.0/T_sla_s + term**0.5) / 2.0
-
-        F_max = node.gflops / mu_min
-        return max(F_max, 0.5)  # 放宽下限，允许更小的模型
+        # 基于稳定性的 F_max: F < C / λ
+        F_max = node.gflops / lam
+        return max(F_max, 0.5)  # 允许最小 0.5 GFLOPS 的模型
 
     def _get_T_SLA(self, task: str = None) -> float:
         """SLA 死线（jigsaw 更严格，其他任务 200ms）"""
@@ -509,10 +501,15 @@ class RoutingOURS(RoutingAlgorithm):
             if arch is None:
                 continue
 
-            # 排队时延（M/M/1）
+            # 排队时延（M/M/1 有上界模型）
             mu = node.gflops / (arch['flops'] / 1e9)
             lam = max(node.lambda_arrival, 0.1)
-            T_queue = 1000.0 / max(mu - lam, 0.1) if mu > lam else 10000.0
+            rho = lam / mu if mu > 0 else 1.0
+            if rho < 0.9:
+                T_queue = 1000.0 / (mu - lam)
+            else:
+                T_queue = max(2000.0, 1000.0 / (mu * (1 - rho)))
+            T_queue = min(T_queue, 5000.0)
 
             # SLA 预检（论文 A 约束过滤）
             if T_queue > self.config.T_SLA_ms:
@@ -578,10 +575,15 @@ class RoutingHeuristicA(RoutingAlgorithm):
             if arch is None:
                 continue
 
-            # 排队时延
+            # 排队时延（M/M/1 有上界模型）
             mu = node.gflops / (arch['flops'] / 1e9)
             lam = max(node.lambda_arrival, 0.1)
-            T_queue = 1000.0 / max(mu - lam, 0.1) if mu > lam else 10000.0
+            rho = lam / mu if mu > 0 else 1.0
+            if rho < 0.9:
+                T_queue = 1000.0 / (mu - lam)
+            else:
+                T_queue = max(2000.0, 1000.0 / (mu * (1 - rho)))
+            T_queue = min(T_queue, 5000.0)
 
             # Dijkstra 拓扑距离
             L_topo = self.dijkstra(src_node.nid, nid, topo)
@@ -636,10 +638,15 @@ class RoutingGreedyB(RoutingAlgorithm):
             if arch is None:
                 continue
 
-            # 排队时延
+            # 排队时延（M/M/1 有上界模型）
             mu = node.gflops / (arch['flops'] / 1e9)
             lam = max(node.lambda_arrival, 0.1)
-            T_queue = 1000.0 / max(mu - lam, 0.1) if mu > lam else 10000.0
+            rho = lam / mu if mu > 0 else 1.0
+            if rho < 0.9:
+                T_queue = 1000.0 / (mu - lam)
+            else:
+                T_queue = max(2000.0, 1000.0 / (mu * (1 - rho)))
+            T_queue = min(T_queue, 5000.0)
 
             # 拓扑距离（最近节点路由只用拓扑距离，不考虑排队）
             L_topo = topo.get_delay(src_node.nid, nid)
