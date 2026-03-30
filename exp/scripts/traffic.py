@@ -9,7 +9,7 @@ from topo import Topology
 
 
 class TrafficGenerator:
-    """流量生成器：支持平稳/潮汐/突发三种模式"""
+    """流量生成器：支持平稳/潮汐/突发三种模式 + 单变量扰动"""
 
     def __init__(self, config, topology: Topology, tasks: List[str]):
         self.config = config
@@ -21,6 +21,24 @@ class TrafficGenerator:
         self.node_lambda_history: Dict[int, List[float]] = defaultdict(list)
         self.lambda_th: Dict[int, float] = {}
 
+        # 当前扰动参数（支持运行时覆盖）
+        self._override_lambda: float = None
+        self._override_request_length: int = None
+        self._override_n_tasks: int = None
+
+    def set_perturbation(self, *, lambda_override: float = None,
+                         request_length: int = None, n_tasks: int = None):
+        """设置单变量扰动参数"""
+        self._override_lambda = lambda_override
+        self._override_request_length = request_length
+        self._override_n_tasks = n_tasks
+
+    def clear_perturbation(self):
+        """清除扰动设置"""
+        self._override_lambda = None
+        self._override_request_length = None
+        self._override_n_tasks = None
+
     def generate_slot(self, t: int, mode: str = 'steady') -> Dict[int, List[Tuple[str, int]]]:
         """
         生成时隙 t 的请求分配。
@@ -30,13 +48,25 @@ class TrafficGenerator:
         """
         requests = defaultdict(list)
 
+        # 确定激活的任务类型
+        if self._override_n_tasks is not None and self._override_n_tasks < len(self.tasks):
+            active_tasks = self.tasks[:self._override_n_tasks]
+        else:
+            active_tasks = self.tasks
+
+        # 确定请求长度
+        req_length = (self._override_request_length if self._override_request_length is not None
+                      else self.config.request_length_base)
+
         for nid, node in self.topology.nodes.items():
             if node.node_type == 'cloud':
                 continue
 
             # 到达率 λ(t) - 单位: req/s
-            # λ_base 设为 3.0 req/s（Poisson采样），保证小型节点也能稳定服务
-            if mode == 'steady':
+            # 优先使用 override 值
+            if self._override_lambda is not None:
+                lam = self._override_lambda
+            elif mode == 'steady':
                 lam = self.config.lambda_base * (0.8 + 0.4 * np.random.random())
             elif mode == 'tidal':
                 period = 100  # 对齐论文 B 100s 周期
@@ -64,8 +94,8 @@ class TrafficGenerator:
             n_requests = min(n_requests, 200)  # 上限避免爆炸
 
             for _ in range(n_requests):
-                task = self.tasks[np.random.randint(len(self.tasks))]
-                duration = max(1, int(np.random.exponential(5.0)))
+                task = active_tasks[np.random.randint(len(active_tasks))]
+                duration = max(1, int(np.random.exponential(req_length)))
                 requests[nid].append((task, duration))
 
         return dict(requests)

@@ -43,6 +43,8 @@ class Topology:
 
         if scale == 'small':
             self._build_small()
+        elif scale == 'medium':
+            self._build_medium()
         else:
             self._build_large()
 
@@ -101,6 +103,40 @@ class Topology:
             if nid_edge != self.cloud_nid:
                 self.delay_matrix[(self.cloud_nid, nid_edge)] = self.config.L_cloud_ms
                 self.delay_matrix[(nid_edge, self.cloud_nid)] = self.config.L_cloud_ms
+
+    def _build_medium(self):
+        """新增中拓扑: 30 节点分层树状（4区域 × 7节点 + 2备用）"""
+        n = self.config.n_medium
+        nodes_per_region = 7
+        cloud_nid = n
+
+        # 4 区域 × 7 节点
+        for rid in range(4):
+            for nid_in_region in range(nodes_per_region):
+                nid = rid * nodes_per_region + nid_in_region
+                x = (rid + nid_in_region * 0.1) / 4.0
+                y = 0.5
+                mem, gflops = 4096, 30.0
+                self.nodes[nid] = Node(nid=nid, node_type='edge',
+                                        memory_mb=mem, gflops=gflops, x=x, y=y)
+
+        # 云端
+        self.cloud_nid = cloud_nid
+        self.nodes[self.cloud_nid] = Node(nid=cloud_nid, node_type='cloud',
+                                           memory_mb=65536, gflops=10000, x=0.5, y=0.5)
+
+        # 延迟矩阵：区域内 2ms，区域间 8ms
+        for i in range(n + 1):
+            for j in range(n + 1):
+                if i != j:
+                    ri = i // nodes_per_region
+                    rj = j // nodes_per_region
+                    self.delay_matrix[(i, j)] = 2.0 if ri == rj else 8.0
+
+        # 云边延迟
+        for i in range(n):
+            self.delay_matrix[(i, self.cloud_nid)] = self.config.L_cloud_ms
+            self.delay_matrix[(self.cloud_nid, i)] = self.config.L_cloud_ms
 
     def _build_large(self):
         """对齐论文 B: ta2 65 节点分层拓扑"""

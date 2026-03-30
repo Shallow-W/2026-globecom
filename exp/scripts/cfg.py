@@ -14,13 +14,17 @@ class Config:
     data_path: str = "D:/Item/lab/2026globcom/exp/data/evaluation_tables_20260325_163931.xlsx"
     output_dir: str = "D:/Item/lab/2026globcom/exp/results/"
 
-    # 拓扑参数（对齐论文 A: 15节点小拓扑 / 论文 B: 65节点大拓扑）
+    # 拓扑参数（对齐论文 A: 15节点小拓扑 / 论文 B: 65节点大拓扑 / 新增30节点中拓扑）
     n_small: int = 15
+    n_medium: int = 30
     n_large: int = 65
 
     # 节点异构资源（对齐论文 A: 8-64 核 → GFLOPS 和内存）
     # 格式: (节点数量, 内存MB, 峰值算力GFLOPS)
     node_types: List[Tuple[int, int, float]] = None
+
+    # 中拓扑节点配置（统一中型）
+    node_types_medium: List[Tuple[int, int, float]] = None
 
     # SLA 参数（对齐论文 A/B）
     T_SLA_ms: float = 200.0  # 通用 SLA
@@ -33,6 +37,10 @@ class Config:
     # 大型节点 100GF + 中等架构 μ≈40 req/s → 稳定 λ < 10 req/s
     lambda_base: float = 3.0  # 基准到达率 req/s（每节点，每时隙 = Poisson(λ_base)）
     lambda_th_percentile: float = 0.7  # λ_th 分位点（用于动态权重触发）
+
+    # 单变量扰动参数（静态部署实验）
+    request_length_base: int = 5  # 基准请求服务时长（slots）
+    n_task_types: int = 7  # 激活的任务类型数（1-7）
 
     # 云边参数
     B_cloud_mbps: float = 100.0  # 云边带宽 Mbps
@@ -59,4 +67,9 @@ class Config:
                 (5, 2048, 10.0),
                 (7, 4096, 30.0),
                 (3, 8192, 100.0),
+            ]
+        if self.node_types_medium is None:
+            # 中拓扑：统一中型节点 4GB, 30GF
+            self.node_types_medium = [
+                (self.n_medium, 4096, 30.0),
             ]
