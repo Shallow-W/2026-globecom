@@ -88,6 +88,10 @@ class Simulator:
 
                     if target_node is None or arch is None:
                         self.stats['failed_requests'] += 1
+                        # 失败请求计入超时惩罚时延（按SLA值）
+                        T_SLA = cfg.T_SLA_jigsaw_ms if task == 'jigsaw' else cfg.T_SLA_ms
+                        self.stats['total_latency_ms'] += T_SLA
+                        self.stats['latencies'].append(T_SLA)
                         continue
 
                     # 缓存/拉取处理
