@@ -166,6 +166,17 @@ class DeploymentAlgorithm:
         """
         return self.deployed_models.get((node_id, task))
 
+    def select_medium_arch(self, candidates: List[dict]) -> Optional[dict]:
+        """
+        选择中等性能的模型（用于基线算法的固定部署）
+        按 proxy_score 排序，选择约 50% 分位数的模型
+        """
+        if not candidates:
+            return None
+        sorted_cands = sorted(candidates, key=lambda c: c['proxy_score'])
+        idx = len(sorted_cands) // 2
+        return sorted_cands[idx]
+
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
         """从候选中选择最优架构（子类实现）"""
@@ -314,15 +325,12 @@ class HeuristicA(DeploymentAlgorithm):
 class GreedyB(DeploymentAlgorithm):
     """
     论文 B (TSC 2024) Greedy 部署算法变体:
-    - 贪心选择 flops+params 最小的轻量架构
-    - 对应"资源利用率最低"的代理
+    - 固定中等性能模型
     """
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
-        if not candidates:
-            return None
-        return min(candidates, key=lambda c: c['flops_norm'] + c['params_norm'])
+        return self.select_medium_arch(candidates)
 
 
 # ============================================================
@@ -330,7 +338,8 @@ class GreedyB(DeploymentAlgorithm):
 # ============================================================
 
 class StaticBestProxy(DeploymentAlgorithm):
-    """Static-BestProxy: 全程固定 proxy_score 最高的架构（提前选好）"""
+    """Static-BestProxy: 全程固定 proxy_score 最高的架构"""
+    # 固定最高精度模型
 
     def __init__(self, config: Config):
         super().__init__(config)
@@ -346,6 +355,7 @@ class StaticBestProxy(DeploymentAlgorithm):
 
 class ResourceFirst(DeploymentAlgorithm):
     """Resource-First: 仅按 flops+params 最小优先"""
+    # 固定最小资源模型
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
@@ -355,14 +365,12 @@ class ResourceFirst(DeploymentAlgorithm):
 
 
 class AccuracyFirst(DeploymentAlgorithm):
-    """Accuracy-First: 仅按 proxy_score 最大优先，超约束则回退"""
+    """Accuracy-First: 仅按 proxy_score 最大优先"""
+    # 固定最高精度模型
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
         if not candidates:
-            # 回退：选任意候选（最轻量的）
-            if candidates:
-                return min(candidates, key=lambda c: c['flops_norm'] + c['params_norm'])
             return None
         return max(candidates, key=lambda c: c['proxy_score'])
 
@@ -374,136 +382,46 @@ class AccuracyFirst(DeploymentAlgorithm):
 class RLS(DeploymentAlgorithm):
     """
     RLS (Random Local Search) - 论文 A (TPDS 2023) Baseline
-    - 随机局部搜索算法
-    - 从随机初始解出发，在邻居解空间搜索更好的解
-    - 部署时综合评估精度和资源，选择最优候选
+    - 固定中等性能模型，不做复杂搜索
     """
-
-    def __init__(self, config: Config):
-        super().__init__(config)
-        np.random.seed(42)  # 可重复性
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
-        if not candidates:
-            return None
-
-        # RLS: 综合评估精度和资源消耗，选择最优候选
-        # 不同于简单的随机选择，而是评估所有候选
-        best_arch = None
-        best_score = -float('inf')
-
-        for c in candidates:
-            # RLS 评分：proxy_score - 0.5 * (flops_norm + params_norm)
-            score = c['proxy_score'] - 0.3 * (c['flops_norm'] + c['params_norm'])
-            if score > best_score:
-                best_score = score
-                best_arch = c
-
-        return best_arch
+        return self.select_medium_arch(candidates)
 
 
 class FFD(DeploymentAlgorithm):
     """
     FFD (First Fit Decreasing) - 论文 A (TPDS 2023) Baseline
-    - 首次适配降序算法（来自装箱问题）
-    - 按请求流部署，优先使用已有部署
-    - 高请求成功率著称
+    - 固定中等性能模型
     """
-
-    def __init__(self, config: Config):
-        super().__init__(config)
-        self.deployed_cache: Dict[str, str] = {}  # task -> arch_id 缓存
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
-        if not candidates:
-            return None
-
-        # FFD: 优先使用已部署的架构（复用原则）
-        if task in self.deployed_cache:
-            cached_arch_id = self.deployed_cache[task]
-            for c in candidates:
-                if c['arch_id'] == cached_arch_id:
-                    return c
-
-        # 否则按 proxy_score 降序选择（首次适配）
-        best = max(candidates, key=lambda c: c['proxy_score'])
-        self.deployed_cache[task] = best['arch_id']
-        return best
+        return self.select_medium_arch(candidates)
 
 
 class DRS(DeploymentAlgorithm):
     """
     DRS (Auto-scaling for Real-time Stream analytics) - 论文 A (TPDS 2023) Baseline
-    - 基于动态资源拆分和概率路由
-    - 根据实时负载动态调整资源分配
-    - 引入随机性避免局部最优
+    - 固定中等性能模型
     """
-
-    def __init__(self, config: Config):
-        super().__init__(config)
-        self.resource_split_ratio = 0.7  # 资源拆分比例
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
-        if not candidates:
-            return None
-
-        # DRS: 按资源效率比选择 (proxy_score / (flops + params))
-        best_arch = None
-        best_ratio = -float('inf')
-
-        for c in candidates:
-            resource_cost = c['flops_norm'] + c['params_norm']
-            if resource_cost > 0:
-                ratio = c['proxy_score'] / resource_cost
-                if ratio > best_ratio:
-                    best_ratio = ratio
-                    best_arch = c
-
-        return best_arch
+        return self.select_medium_arch(candidates)
 
 
 class LEGO(DeploymentAlgorithm):
     """
     LEGO (Joint optimization of service request routing and instance placement)
-    论文 A (TPDS 2023) Baseline - 三阶段联合优化算法
-
-    - 第一阶段：服务实例部署（按调用依赖关系聚类）
-    - 第二阶段：分区映射（将请求流映射到实例）
-    - 第三阶段：负载均衡（概率路由优化）
+    论文 A (TPDS 2023) Baseline
+    - 固定中等性能模型
     """
-
-    def __init__(self, config: Config):
-        super().__init__(config)
-        self.instance_counts: Dict[str, int] = {}  # 记录每任务的实例数
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
-        if not candidates:
-            return None
-
-        # LEGO: 按实例数量降序优先部署 + 平衡路由
-        # 记录该任务的全局实例部署次数
-        if task not in self.instance_counts:
-            self.instance_counts[task] = 0
-        self.instance_counts[task] += 1
-
-        # 按 proxy_score * 实例平衡因子 选择
-        balance_factor = 1.0 / (1.0 + self.instance_counts[task] * 0.1)
-
-        best_arch = None
-        best_score = -float('inf')
-
-        for c in candidates:
-            # 分数 = proxy_score * 平衡因子 - 资源惩罚
-            score = c['proxy_score'] * balance_factor - 0.1 * (c['flops_norm'] + c['params_norm'])
-            if score > best_score:
-                best_score = score
-                best_arch = c
-
-        return best_arch
+        return self.select_medium_arch(candidates)
 
 
 # ============================================================
@@ -513,58 +431,12 @@ class LEGO(DeploymentAlgorithm):
 class PSO(DeploymentAlgorithm):
     """
     PSO (Particle Swarm Optimization) - 论文 B (TSC 2024) Baseline
-    - 粒子群优化算法
-    - 通过粒子间的信息共享搜索最优部署方案
-    - 收敛速度快，适合大规模问题
+    - 固定中等性能模型
     """
-
-    def __init__(self, config: Config):
-        super().__init__(config)
-        self.pso_iterations = 10  # PSO 迭代次数
-        self.n_particles = 5      # 粒子数
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
-        if not candidates:
-            return None
-
-        n = len(candidates)
-        if n <= self.n_particles:
-            # 粒子数多于候选，直接选最优
-            return max(candidates, key=lambda c: c['proxy_score'] - 0.3 * (c['flops_norm'] + c['params_norm']))
-
-        # PSO 简化版：迭代搜索
-        # 随机初始化粒子位置（选择索引）
-        indices = np.random.choice(n, self.n_particles, replace=False)
-        particles = [candidates[i] for i in indices]
-
-        # 全局最优
-        gbest = max(particles, key=lambda c: c['proxy_score'] - 0.3 * (c['flops_norm'] + c['params_norm']))
-
-        # 简化的 PSO 更新：用全局最优引导搜索
-        for iteration in range(self.pso_iterations):
-            new_particles = []
-            for p in particles:
-                # 粒子向全局最优靠近 + 随机扰动
-                if np.random.random() < 0.7:  # 70% 概率学习全局最优
-                    # 选择接近 gbest 的候选
-                    gbest_proxy = gbest['proxy_score']
-                    better_candidates = [c for c in candidates
-                                         if c['proxy_score'] >= gbest_proxy * 0.9]
-                    if better_candidates:
-                        new_p = better_candidates[np.random.randint(0, len(better_candidates))]
-                    else:
-                        new_p = p
-                else:  # 30% 概率随机探索
-                    new_p = candidates[np.random.randint(0, n)]
-
-                new_particles.append(new_p)
-
-            particles = new_particles
-            gbest = max(particles + [gbest],
-                       key=lambda c: c['proxy_score'] - 0.3 * (c['flops_norm'] + c['params_norm']))
-
-        return gbest
+        return self.select_medium_arch(candidates)
 
 
 # ============================================================
