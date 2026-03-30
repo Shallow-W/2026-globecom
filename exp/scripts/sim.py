@@ -52,13 +52,23 @@ class Simulator:
             # 1. 流量生成
             requests_by_node = self.traffic_gen.generate_slot(t, self.traffic_mode)
 
-            # 2. 更新节点到达率（使用配置的ar值，保持恒定）
-            # Poisson随机性已经体现在实际请求数上，lambda保持为配置的固定值
+            # 2. 更新节点的活跃请求跟踪
+            #    - 递减所有 active_requests 的剩余时隙
+            #    - 移除已完成的请求
+            #    - 计算有效到达率（已有请求占用 + 新到达）
             for nid, node in self.topology.nodes.items():
-                if nid in requests_by_node:
-                    node.lambda_arrival = len(requests_by_node[nid]) / cfg.slot_duration_s
-                else:
-                    node.lambda_arrival = self.traffic_gen._override_lambda or cfg.lambda_base
+                if node.node_type == 'edge':
+                    # 递减已占用请求的剩余时长，移除完成的
+                    node.active_requests = [
+                        (rem - 1, task) for rem, task in node.active_requests if rem > 1
+                    ]
+                    # 有效负载 = 已有积压 + 新到达
+                    pending = len(node.active_requests)
+                    if nid in requests_by_node:
+                        new_arrivals = len(requests_by_node[nid])
+                        node.lambda_arrival = (pending + new_arrivals) / cfg.slot_duration_s
+                    else:
+                        node.lambda_arrival = max(0.1, pending / cfg.slot_duration_s)
 
             # 3. 预计算每节点每任务的候选架构（每时隙只过滤一次，避免重复遍历 4096 行）
             # 注意：对于baseline，已部署的固定模型应始终可用，即使当前负载很高
@@ -83,7 +93,7 @@ class Simulator:
                 if src_node is None:
                     continue
 
-                for task, _ in reqs:
+                for task, duration in reqs:
                     self.stats['total_requests'] += 1
 
                     # 路由决策
@@ -100,7 +110,8 @@ class Simulator:
                         self.stats['latencies'].append(TIMEOUT_MS)
                         continue
 
-                    # 缓存/拉取处理
+                    # 缓存/拉取处理（LRU策略）
+                    params_mb = arch['params'] / (1024 * 1024)
                     is_cached = arch['arch_id'] in target_node.cache
                     if not is_cached:
                         self.stats['pull_count'] += 1
@@ -108,16 +119,24 @@ class Simulator:
                                       + self.topology.get_delay(target_node.nid, self.topology.cloud_nid))
                         self.stats['pull_delay_ms'] += pull_delay
                         if len(target_node.cache) >= cfg.cache_k:
-                            target_node.cache.pop()
-                        target_node.cache.add(arch['arch_id'])
+                            evicted_id, evicted_params = target_node.cache.popitem(last=False)
+                            evicted_params_mb = evicted_params / (1024 * 1024)
+                            target_node.used_memory_mb = max(0.0, target_node.used_memory_mb - evicted_params_mb)
+                        # LRU: 新访问移到末尾（最新使用）
+                        target_node.cache[arch['arch_id']] = arch['params']
+                        target_node.used_memory_mb += params_mb
+                    else:
+                        # 已缓存：移到末尾（最新使用）
+                        target_node.cache.move_to_end(arch['arch_id'])
 
-                    # 部署状态更新
+                    # 部署状态更新（避免重复计入）
                     if arch['arch_id'] not in target_node.deployed_archs:
                         target_node.deployed_archs.append(arch['arch_id'])
-                        target_node.used_memory_mb += arch['params'] / (1024 * 1024)
 
-                    # 总延迟直接使用 route_delay（已包含 L_topo + T_queue）
-                    # 避免重复计算 T_queue
+                    # 请求占用该节点 N 个时隙（request_length 影响的时长）
+                    target_node.active_requests.append((duration, task))
+
+                    # 总延迟 = 路由返回的 L_topo + T_queue（路由决策时已算好）
                     total_latency = route_delay
 
                     # SLA 检查

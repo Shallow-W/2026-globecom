@@ -374,7 +374,7 @@ class AccuracyFirst(DeploymentAlgorithm):
 class RLS(DeploymentAlgorithm):
     """
     RLS (Random Local Search) - 论文 A (TPDS 2023) Baseline
-    - 固定中等性能模型，不做复杂搜索
+    - 固定中等性能模型
     """
 
     def select_arch(self, node: Node, task: str, t: int,
@@ -461,7 +461,41 @@ class RoutingAlgorithm:
                     if nd < dist.get(v, float('inf')):
                         dist[v] = nd
                         heapq.heappush(pq, (nd, v))
+
         return float('inf')
+
+    def _compute_T_queue(self, node: 'Node', arch: dict, slot_duration: float) -> float:
+        """
+        排队时延计算：M/M/1 有上界模型。
+
+        active_requests 的影响：pending 个请求各占用节点服务能力。
+        pending_service_rate = pending / avg_remaining（归一化到 slots，不依赖 slot_duration_s）
+        - avg_remaining：平均剩余 slot 数（request_length_base 的量级，约 5）
+        - pending / avg_remaining ≈ 持续占用率（req/s 占 mu_base 的比例）
+        """
+        mu_base = node.gflops / (arch['flops'] / 1e9)  # 基础服务率 req/s
+        pending = len(node.active_requests)
+
+        # 到达率：req/s
+        lam = max(node.lambda_arrival, 0.1)
+
+        if pending > 0:
+            avg_remaining = sum(r for r, _ in node.active_requests) / pending  # slots
+            # pending 个请求等效服务率占用：pending / avg_remaining
+            # 当 pending=1, avg_remaining=5 时 = 0.2（占 mu_base 的 20%）
+            pending_service_rate = pending / max(avg_remaining, 0.5)  # req/s
+        else:
+            pending_service_rate = 0.0
+
+        # 有效服务率
+        mu_eff = max(mu_base - pending_service_rate, 0.1)
+
+        rho = lam / mu_eff if mu_eff > 0 else 1.0
+        if rho < 0.9:
+            T_queue = 1000.0 / (mu_eff - lam)
+        else:
+            T_queue = max(2000.0, 1000.0 / (mu_eff * max(1 - rho, 1e-6)))
+        return min(T_queue, 5000.0)
 
     def route(self, request_task: str, src_node: Node,
               topo: Topology, tables: Dict,
@@ -497,23 +531,14 @@ class RoutingOURS(RoutingAlgorithm):
             if not cands:
                 continue
 
-            arch = deploy_algo.select_arch(node, request_task, t, tables, cands)
+            # OURS：通过 get_deployed_model 获取当前部署的模型
+            # get_deployed_model 内部会检查负载变化 > 30% 阈值，触发动态模型替换
+            arch = deploy_algo.get_deployed_model(nid, request_task, node, t, tables)
             if arch is None:
                 continue
 
-            # 排队时延（M/M/1 有上界模型）
-            mu = node.gflops / (arch['flops'] / 1e9)
-            lam = max(node.lambda_arrival, 0.1)
-            rho = lam / mu if mu > 0 else 1.0
-            if rho < 0.9:
-                T_queue = 1000.0 / (mu - lam)
-            else:
-                T_queue = max(2000.0, 1000.0 / (mu * (1 - rho)))
-            T_queue = min(T_queue, 5000.0)
-
-            # SLA 预检（论文 A 约束过滤）
-            if T_queue > self.config.T_SLA_ms:
-                continue
+            # 排队时延（M/M/1 有上界模型，含 active_requests 积压）
+            T_queue = self._compute_T_queue(node, arch, self.config.slot_duration_s)
 
             # 云边拉取开销
             is_cached = arch['arch_id'] in node.cache
@@ -575,15 +600,8 @@ class RoutingHeuristicA(RoutingAlgorithm):
             if arch is None:
                 continue
 
-            # 排队时延（M/M/1 有上界模型）
-            mu = node.gflops / (arch['flops'] / 1e9)
-            lam = max(node.lambda_arrival, 0.1)
-            rho = lam / mu if mu > 0 else 1.0
-            if rho < 0.9:
-                T_queue = 1000.0 / (mu - lam)
-            else:
-                T_queue = max(2000.0, 1000.0 / (mu * (1 - rho)))
-            T_queue = min(T_queue, 5000.0)
+            # 排队时延（M/M/1 有上界模型，含 active_requests 积压）
+            T_queue = self._compute_T_queue(node, arch, self.config.slot_duration_s)
 
             # Dijkstra 拓扑距离
             L_topo = self.dijkstra(src_node.nid, nid, topo)
@@ -602,6 +620,219 @@ class RoutingHeuristicA(RoutingAlgorithm):
         best = min(candidates, key=lambda x: x[3])
 
         return topo.nodes[best[0]], best[1], best[2]
+
+
+# ============================================================
+# 论文 A 路由算法变体 - RLS（随机局部搜索风格：随机选一个可行节点）
+# ============================================================
+
+class RoutingRLS(RoutingAlgorithm):
+    """RLS 路由: 随机选一个可行节点（模拟随机局部搜索的随机重启）"""
+
+    def route(self, request_task: str, src_node: Node,
+              topo: Topology, tables: Dict,
+              deploy_algo: DeploymentAlgorithm, t: int,
+              traffic_gen: TrafficGenerator,
+              slot_candidates: Dict[Tuple[int, str], List[dict]]) -> Tuple[Optional[Node], Optional[dict], float]:
+        candidates = []
+
+        for nid, node in topo.nodes.items():
+            if node.node_type != 'edge':
+                continue
+            cands = slot_candidates.get((nid, request_task), [])
+            if not cands:
+                continue
+            arch = deploy_algo.get_deployed_model(nid, request_task, node, t, tables)
+            if arch is None:
+                continue
+
+            T_queue = self._compute_T_queue(node, arch, self.config.slot_duration_s)
+
+            L_topo = topo.get_delay(src_node.nid, nid)
+            R_total = L_topo + T_queue
+            candidates.append((nid, arch, R_total))
+
+        if not candidates:
+            return None, None, float('inf')
+
+        # RLS 风格：随机选一个可行方案
+        import random
+        chosen = random.choice(candidates)
+        return topo.nodes[chosen[0]], chosen[1], chosen[2]
+
+
+# ============================================================
+# 论文 A 路由算法变体 - FFD（首次适配降序：选拓扑距离最近的可行节点）
+# ============================================================
+
+class RoutingFFD(RoutingAlgorithm):
+    """FFD 路由: 选部署模型 proxy_score 最高的节点（精度优先）"""
+
+    def route(self, request_task: str, src_node: Node,
+              topo: Topology, tables: Dict,
+              deploy_algo: DeploymentAlgorithm, t: int,
+              traffic_gen: TrafficGenerator,
+              slot_candidates: Dict[Tuple[int, str], List[dict]]) -> Tuple[Optional[Node], Optional[dict], float]:
+        candidates = []
+
+        for nid, node in topo.nodes.items():
+            if node.node_type != 'edge':
+                continue
+            cands = slot_candidates.get((nid, request_task), [])
+            if not cands:
+                continue
+            arch = deploy_algo.get_deployed_model(nid, request_task, node, t, tables)
+            if arch is None:
+                continue
+
+            T_queue = self._compute_T_queue(node, arch, self.config.slot_duration_s)
+
+            L_topo = topo.get_delay(src_node.nid, nid)
+            R_total = L_topo + T_queue
+
+            # FFD 风格：算力最强 + 距离惩罚（优先选算力大且近的节点）
+            candidates.append((nid, arch, R_total, node.gflops - 5 * L_topo))
+
+        if not candidates:
+            return None, None, float('inf')
+
+        # 选 gflops 最高的节点（算力最强=服务能力最大）
+        best = max(candidates, key=lambda x: x[3])
+        return topo.nodes[best[0]], best[1], best[2]
+
+
+# ============================================================
+# 论文 A 路由算法变体 - DRS（动态资源拆分：选队列最短的节点）
+# ============================================================
+
+class RoutingDRS(RoutingAlgorithm):
+    """DRS 路由: 选择当前负载最轻（lambda_arrival 最小）的节点"""
+
+    def route(self, request_task: str, src_node: Node,
+              topo: Topology, tables: Dict,
+              deploy_algo: DeploymentAlgorithm, t: int,
+              traffic_gen: TrafficGenerator,
+              slot_candidates: Dict[Tuple[int, str], List[dict]]) -> Tuple[Optional[Node], Optional[dict], float]:
+        candidates = []
+
+        for nid, node in topo.nodes.items():
+            if node.node_type != 'edge':
+                continue
+            cands = slot_candidates.get((nid, request_task), [])
+            if not cands:
+                continue
+            arch = deploy_algo.get_deployed_model(nid, request_task, node, t, tables)
+            if arch is None:
+                continue
+
+            T_queue = self._compute_T_queue(node, arch, self.config.slot_duration_s)
+
+            # SLA 过滤（排除排队时延超标的节点）
+            if T_queue > self.config.T_SLA_ms:
+                continue
+
+            L_topo = topo.get_delay(src_node.nid, nid)
+            R_total = L_topo + T_queue
+
+            # DRS 风格：负载最轻且距离近的综合评分
+            # 归一化：lambda 约 0.1~10，L_topo 约 1~20ms，用 L_topo/10 来对齐量纲
+            score = -node.lambda_arrival - L_topo / 10.0
+            candidates.append((nid, arch, R_total, score))
+
+        if not candidates:
+            return None, None, float('inf')
+
+        # DRS 风格：选 score 最高的节点
+        best = max(candidates, key=lambda x: x[3])
+        return topo.nodes[best[0]], best[1], best[2]
+
+
+# ============================================================
+# 论文 A 路由算法变体 - LEGO（联合优化：综合效用最高的节点）
+# ============================================================
+
+class RoutingLEGO(RoutingAlgorithm):
+    """LEGO 路由: 综合时延和资源效率，选择综合效用最高的节点"""
+
+    def route(self, request_task: str, src_node: Node,
+              topo: Topology, tables: Dict,
+              deploy_algo: DeploymentAlgorithm, t: int,
+              traffic_gen: TrafficGenerator,
+              slot_candidates: Dict[Tuple[int, str], List[dict]]) -> Tuple[Optional[Node], Optional[dict], float]:
+        candidates = []
+
+        for nid, node in topo.nodes.items():
+            if node.node_type != 'edge':
+                continue
+            cands = slot_candidates.get((nid, request_task), [])
+            if not cands:
+                continue
+            arch = deploy_algo.get_deployed_model(nid, request_task, node, t, tables)
+            if arch is None:
+                continue
+
+            T_queue = self._compute_T_queue(node, arch, self.config.slot_duration_s)
+
+            L_topo = topo.get_delay(src_node.nid, nid)
+            R_total = L_topo + T_queue
+
+            # LEGO 风格：综合考虑时延和模型参数量（传输开销）
+            # 效用 = -R_total（时延越小越好）- 0.1 * params_norm（参数量越小越好）
+            utility = -R_total / 200.0 - 0.1 * arch['params_norm']
+            candidates.append((utility, nid, arch, R_total))
+
+        if not candidates:
+            return None, None, float('inf')
+
+        best = max(candidates, key=lambda x: x[0])
+        return topo.nodes[best[1]], best[2], best[3]
+
+
+# ============================================================
+# 论文 B 路由算法 - PSO（粒子群优化路由：综合效用最高）
+# ============================================================
+
+class RoutingPSO(RoutingAlgorithm):
+    """PSO 路由: 综合时延、模型精度、节点负载，选择全局最优节点"""
+
+    def route(self, request_task: str, src_node: Node,
+              topo: Topology, tables: Dict,
+              deploy_algo: DeploymentAlgorithm, t: int,
+              traffic_gen: TrafficGenerator,
+              slot_candidates: Dict[Tuple[int, str], List[dict]]) -> Tuple[Optional[Node], Optional[dict], float]:
+        candidates = []
+
+        for nid, node in topo.nodes.items():
+            if node.node_type != 'edge':
+                continue
+            cands = slot_candidates.get((nid, request_task), [])
+            if not cands:
+                continue
+            arch = deploy_algo.get_deployed_model(nid, request_task, node, t, tables)
+            if arch is None:
+                continue
+
+            T_queue = self._compute_T_queue(node, arch, self.config.slot_duration_s)
+
+            L_topo = topo.get_delay(src_node.nid, nid)
+            R_total = L_topo + T_queue
+
+            # PSO 风格：综合考虑时延、模型精度和节点负载
+            mu = node.gflops / (arch['flops'] / 1e9)
+            lam = max(node.lambda_arrival, 0.1)
+            rho = lam / mu if mu > 0 else 1.0
+            load_norm = min(rho, 0.99)
+            utility = (arch['proxy_score']
+                       - 0.5 * (R_total / 200.0)
+                       - 0.3 * load_norm
+                       - 0.2 * arch['params_norm'])
+            candidates.append((utility, nid, arch, R_total))
+
+        if not candidates:
+            return None, None, float('inf')
+
+        best = max(candidates, key=lambda x: x[0])
+        return topo.nodes[best[1]], best[2], best[3]
 
 
 # ============================================================
@@ -638,15 +869,8 @@ class RoutingGreedyB(RoutingAlgorithm):
             if arch is None:
                 continue
 
-            # 排队时延（M/M/1 有上界模型）
-            mu = node.gflops / (arch['flops'] / 1e9)
-            lam = max(node.lambda_arrival, 0.1)
-            rho = lam / mu if mu > 0 else 1.0
-            if rho < 0.9:
-                T_queue = 1000.0 / (mu - lam)
-            else:
-                T_queue = max(2000.0, 1000.0 / (mu * (1 - rho)))
-            T_queue = min(T_queue, 5000.0)
+            # 排队时延（M/M/1 有上界模型，含 active_requests 积压）
+            T_queue = self._compute_T_queue(node, arch, self.config.slot_duration_s)
 
             # 拓扑距离（最近节点路由只用拓扑距离，不考虑排队）
             L_topo = topo.get_delay(src_node.nid, nid)
@@ -673,15 +897,15 @@ ALGORITHM_MAP = {
     # 我们的论文算法
     'OURS':           (OursCEDR,           RoutingOURS),
 
-    # 论文 A (TPDS 2023) 原始 Baseline
-    'RLS':            (RLS,                RoutingHeuristicA),   # 随机局部搜索 + Dijkstra
-    'FFD':            (FFD,               RoutingHeuristicA),   # 首次适配降序 + Dijkstra
-    'DRS':            (DRS,               RoutingHeuristicA),   # 动态资源拆分 + Dijkstra
-    'LEGO':           (LEGO,              RoutingHeuristicA),   # 三阶段联合优化 + Dijkstra
+    # 论文 A (TPDS 2023) 原始 Baseline（部署相同固定模型，路由策略不同）
+    'RLS':            (RLS,                RoutingRLS),         # 随机选节点
+    'FFD':            (FFD,               RoutingFFD),         # 精度优先路由
+    'DRS':            (DRS,               RoutingDRS),         # 选负载最轻节点
+    'LEGO':           (LEGO,              RoutingLEGO),        # 综合效用最高
 
     # 论文 B (TSC 2024) 原始 Baseline
     'GREEDY':        (GreedyB,            RoutingGreedyB),     # 贪心最小资源 + 最近节点
-    'PSO':            (PSO,               RoutingGreedyB),     # 粒子群优化 + 最近节点
+    'PSO':            (PSO,               RoutingPSO),       # 粒子群优化 + 综合效用最优
 
     # 消融实验基线
     'STATIC':         (StaticBestProxy,    RoutingGreedyB),

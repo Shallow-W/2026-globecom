@@ -4,8 +4,9 @@
 
 import random
 import numpy as np
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Dict, Set, List
+from typing import Dict, List, Tuple
 
 
 @dataclass
@@ -22,8 +23,9 @@ class Node:
     used_memory_mb: float = 0.0
     lambda_arrival: float = 0.0  # 到达率 req/s
     queue_length: int = 0
+    active_requests: List[Tuple[int, str]] = field(default_factory=list)  # (remaining_slots, task_name)
     deployed_archs: List[str] = field(default_factory=list)
-    cache: Set[str] = field(default_factory=set)
+    cache: OrderedDict = field(default_factory=OrderedDict)  # LRU cache: arch_id -> params_mb
 
     # 统计
     served_count: int = 0
@@ -67,14 +69,14 @@ class Topology:
                     self.delay_matrix[(i, j)] = delay_ms
                     self.delay_matrix[(j, i)] = delay_ms
 
-        # 保证连通：连接最近邻
+        # 保证连通：每个节点至少连接前后两个邻居（度 ≥ 3）
         for i in range(n):
-            j = (i + 1) % n
-            if (i, j) not in self.delay_matrix:
-                d = np.sqrt((coords[i][0] - coords[j][0])**2 + (coords[i][1] - coords[j][1])**2)
-                delay_ms = 1.0 + d * 9.0
-                self.delay_matrix[(i, j)] = delay_ms
-                self.delay_matrix[(j, i)] = delay_ms
+            for j in [(i - 1) % n, (i + 1) % n, (i - 2) % n]:
+                if (i, j) not in self.delay_matrix:
+                    d = np.sqrt((coords[i][0] - coords[j][0])**2 + (coords[i][1] - coords[j][1])**2)
+                    delay_ms = 1.0 + d * 9.0
+                    self.delay_matrix[(i, j)] = delay_ms
+                    self.delay_matrix[(j, i)] = delay_ms
 
         # 节点资源分配
         nid = 1  # 0 留给云端
@@ -174,4 +176,4 @@ class Topology:
 
     def get_delay(self, i: int, j: int) -> float:
         """获取两节点间延迟（ms）"""
-        return self.delay_matrix.get((i, j), 100.0)
+        return self.delay_matrix.get((i, j), 20.0)  # 默认20ms（与云边延迟一致）

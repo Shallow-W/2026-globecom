@@ -225,16 +225,16 @@ def run_perturbation_experiment(config: Config, perturb: str = 'arrival_rate',
 
     for val in values:
         print(f"\n### {perturb} = {val}")
-        topo = Topology(config, scale=topology_scale)
         perturb_results = {}
 
         for algo_name in algorithms:
             print(f"  [{algo_name}] ...", end=' ', flush=True)
             t0 = time.time()
 
-            # 设置扰动
+            # 每个算法用独立的 topo（避免节点状态互相干扰）
             np.random.seed(config.seed)
             import random; random.seed(config.seed)
+            topo = Topology(config, scale=topology_scale)
             sim = Simulator(config, topo, tables,
                            *ALGORITHM_MAP[algo_name], traffic_mode)
 
@@ -344,7 +344,6 @@ def run_equal_latency_experiment(config: Config, target_latency: float = 50.0,
         algorithms = list(ALGORITHM_MAP.keys())
 
     tables = load_architecture_tables(config.data_path)
-    topo = Topology(config, scale=topology_scale)
 
     print(f"\n{'='*70}")
     print(f"等时延资源效率实验: 目标时延={target_latency}ms, 拓扑={topology_scale}")
@@ -353,18 +352,19 @@ def run_equal_latency_experiment(config: Config, target_latency: float = 50.0,
     results = {}
     ours_result = None
 
-    # 先运行 OURS
+    # 先运行 OURS（用自己的 topo）
     print(f"\n  [OURS] (基准)...", end=' ', flush=True)
     t0 = time.time()
     np.random.seed(config.seed)
     import random; random.seed(config.seed)
+    topo = Topology(config, scale=topology_scale)
     sim = Simulator(config, topo, tables, *ALGORITHM_MAP['OURS'], 'steady')
     r = sim.run()
     results['OURS'] = r
     ours_result = r
     print(f"lat={r['avg_latency_ms']:.1f}ms util={r['node_utilization_avg']:.3f} ({time.time()-t0:.0f}s)")
 
-    # 运行其他算法
+    # 运行其他算法（每个用自己的 topo）
     for algo_name in algorithms:
         if algo_name == 'OURS':
             continue
@@ -372,6 +372,7 @@ def run_equal_latency_experiment(config: Config, target_latency: float = 50.0,
         t0 = time.time()
         np.random.seed(config.seed)
         random.seed(config.seed)
+        topo = Topology(config, scale=topology_scale)
         sim = Simulator(config, topo, tables, *ALGORITHM_MAP[algo_name], 'steady')
         r = sim.run()
         results[algo_name] = r
@@ -453,7 +454,6 @@ def run_scale_experiment(config: Config, scales: list = None,
         scale_name = {'small': 'N=15', 'medium': 'N=30', 'large': 'N=65'}.get(scale, scale)
         print(f"\n### 规模: {scale_name}")
 
-        topo = Topology(config, scale=scale)
         scale_results = {}
 
         for algo_name in algorithms:
@@ -461,6 +461,7 @@ def run_scale_experiment(config: Config, scales: list = None,
             t0 = time.time()
             np.random.seed(config.seed)
             import random; random.seed(config.seed)
+            topo = Topology(config, scale=scale)
             sim = Simulator(config, topo, tables, *ALGORITHM_MAP[algo_name], traffic_mode)
             r = sim.run()
             scale_results[algo_name] = r

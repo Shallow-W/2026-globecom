@@ -27,8 +27,8 @@ class Config:
     node_types_medium: List[Tuple[int, int, float]] = None
 
     # SLA 参数（对齐论文 A/B）
-    T_SLA_ms: float = 200.0  # 通用 SLA
-    T_SLA_jigsaw_ms: float = 100.0  # jigsaw 严格 SLA
+    T_SLA_ms: float = 5000.0  # 通用 SLA
+    T_SLA_jigsaw_ms: float = 5000.0  # jigsaw 严格 SLA
 
     # 流量参数
     # 注意: λ 应保证系统稳定，即 λ < min(μ) 对所有节点-架构组合
@@ -49,7 +49,7 @@ class Config:
 
     # 仿真参数
     slot_duration_s: float = 1.0  # 时隙长度（秒）
-    n_slots: int = 500  # 默认仿真时隙数
+    n_slots: int = 100  # 默认仿真时隙数
     cache_k: int = 10  # 每节点缓存架构数
     seed: int = 42  # 随机种子
 
