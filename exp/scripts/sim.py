@@ -45,6 +45,9 @@ class Simulator:
         """运行完整仿真"""
         cfg = self.config
 
+        # 初始化部署算法（选择初始模型）
+        self.deploy_algo.initialize(self.topology, self.tables, t=0)
+
         for t in range(cfg.n_slots):
             # 1. 流量生成
             requests_by_node = self.traffic_gen.generate_slot(t, self.traffic_mode)

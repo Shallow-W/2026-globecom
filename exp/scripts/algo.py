@@ -38,10 +38,24 @@ from traffic import TrafficGenerator
 # ============================================================
 
 class DeploymentAlgorithm:
-    """部署算法基类"""
+    """
+    部署算法基类
+
+    设计思路：
+    - initialize(): 初始化时为每个(节点, 任务)选择模型并缓存
+    - get_deployed_model(): 获取已部署的模型（用于运行时路由）
+    - select_arch(): 实际选择模型的逻辑（子类实现）
+
+    对于 Baseline：initialize() 时选择模型，运行时 get_deployed_model() 返回缓存的模型
+    对于 OURS：initialize() 时选择初始模型，但运行时仍可调用 select_arch() 进行动态替换
+    """
 
     def __init__(self, config: Config):
         self.config = config
+        # 已部署的模型缓存: {(node_id, task): arch}
+        self.deployed_models: Dict[Tuple[int, str], dict] = {}
+        # 是否已初始化
+        self._initialized = False
 
     def compute_F_max(self, node: Node, t: int, task: str = None) -> float:
         """
@@ -118,6 +132,40 @@ class DeploymentAlgorithm:
             for i in range(len(idx))
         ]
 
+    def initialize(self, topology, tables: Dict, t: int = 0):
+        """
+        初始化阶段：为每个(节点, 任务)选择模型并缓存
+
+        对于 Baseline：只在初始化时调用一次 select_arch()
+        对于 OURS：也调用一次 select_arch() 作为初始选择，但运行时可重新选择（动态替换）
+
+        子类可重写此方法来自定义初始化逻辑
+        """
+        self.deployed_models = {}
+        self._initialized = True
+
+        for nid, node in topology.nodes.items():
+            if node.node_type != 'edge':
+                continue
+            for task_name in tables.keys():
+                cands = self.filter_candidates(node, task_name, t, tables)
+                if cands:
+                    # 调用子类的 select_arch 选择模型并缓存
+                    arch = self.select_arch(node, task_name, t, tables, cands)
+                    if arch:
+                        self.deployed_models[(nid, task_name)] = arch
+
+    def get_deployed_model(self, node_id: int, task: str,
+                          node: 'Node' = None, t: int = None,
+                          tables: Dict = None) -> Optional[dict]:
+        """
+        获取已部署的模型（用于运行时路由）
+
+        对于 Baseline：返回初始化时缓存的模型
+        对于 OURS：基类实现返回缓存模型，但 OURS 可在运行时覆盖
+        """
+        return self.deployed_models.get((node_id, task))
+
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
         """从候选中选择最优架构（子类实现）"""
@@ -134,7 +182,15 @@ class OursCEDR(DeploymentAlgorithm):
     - 动态算力红线（论文公式）
     - 硬约束过滤
     - 效用函数 + 动态权重自适应降级
+    - 动态模型替换：根据负载变化动态替换模型
     """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        # 记录上一次选择的模型ID，用于检测是否需要替换
+        self.last_selected_arch_id: Dict[Tuple[int, str], str] = {}
+        # 负载变化阈值：超过此比例则触发模型替换
+        self.replace_threshold = 0.3  # 30% 负载变化触发
 
     def select_arch(self, node: Node, task: str, t: int,
                     tables: Dict, candidates: List[dict]) -> Optional[dict]:
@@ -162,6 +218,73 @@ class OursCEDR(DeploymentAlgorithm):
                 best_arch = c
 
         return best_arch
+
+    def get_deployed_model(self, node_id: int, task: str,
+                          node: 'Node' = None, t: int = None,
+                          tables: Dict = None) -> Optional[dict]:
+        """
+        获取已部署的模型，支持动态替换
+
+        对于 OURS：
+        - 如果负载变化超过阈值（相比上次选择时），则重新选择模型
+        - 这实现了"动态模型替换"机制
+
+        参数:
+            node_id: 节点ID
+            task: 任务名称
+            node: 节点对象（用于获取当前负载）
+            t: 当前时隙
+            tables: 候选架构表（用于重新选择）
+        """
+        cached = self.deployed_models.get((node_id, task))
+
+        # 如果没有初始化过，先初始化
+        if cached is None:
+            return None
+
+        # 对于 OURS：检测是否需要动态替换
+        if node is not None and t is not None and tables is not None:
+            if self._should_replace_model(node, task, t):
+                # 重新计算可行候选
+                cands = self.filter_candidates(node, task, t, tables)
+                if cands:
+                    new_arch = self.select_arch(node, task, t, tables, cands)
+                    if new_arch and new_arch['arch_id'] != cached['arch_id']:
+                        # 模型替换：更新缓存
+                        self.deployed_models[(node_id, task)] = new_arch
+                        self.last_selected_arch_id[(node_id, task)] = new_arch['arch_id']
+                        return new_arch
+
+        return cached
+
+    def _should_replace_model(self, node: Node, task: str, t: int) -> bool:
+        """
+        判断是否需要替换模型
+
+        替换条件：
+        1. 负载显著增加（超过阈值）-> 可能需要更轻量的模型
+        2. 负载显著降低（超过阈值）-> 可能可以换回更高精度的模型
+
+        使用指数移动平均来平滑负载变化
+        """
+        if not hasattr(self, '_last_load'):
+            self._last_load: Dict[Tuple[int, str], float] = {}
+
+        key = (node.nid, task)
+        current_load = node.lambda_arrival
+        last_load = self._last_load.get(key, current_load)
+
+        # 计算负载变化比例
+        if last_load > 0.1:
+            load_change = abs(current_load - last_load) / last_load
+        else:
+            load_change = 0.0
+
+        # 更新记录的负载
+        self._last_load[key] = current_load
+
+        # 如果负载变化超过阈值，触发替换检查
+        return load_change > self.replace_threshold
 
 
 # ============================================================
@@ -566,7 +689,7 @@ class RoutingHeuristicA(RoutingAlgorithm):
               traffic_gen: TrafficGenerator,
               slot_candidates: Dict[Tuple[int, str], List[dict]]) -> Tuple[Optional[Node], Optional[dict], float]:
 
-        # 收集所有可行方案（节点+候选）
+        # 收集所有可行方案（节点+已部署模型）
         candidates = []
 
         for nid, node in topo.nodes.items():
@@ -577,7 +700,9 @@ class RoutingHeuristicA(RoutingAlgorithm):
             if not cands:
                 continue
 
-            arch = deploy_algo.select_arch(node, request_task, t, tables, cands)
+            # Baseline：使用已部署的固定模型（get_deployed_model 返回缓存的模型）
+            # OURS：get_deployed_model 会检查是否需要动态替换
+            arch = deploy_algo.get_deployed_model(nid, request_task, node, t, tables)
             if arch is None:
                 continue
 
@@ -633,7 +758,9 @@ class RoutingGreedyB(RoutingAlgorithm):
             if not cands:
                 continue
 
-            arch = deploy_algo.select_arch(node, request_task, t, tables, cands)
+            # Baseline：使用已部署的固定模型（get_deployed_model 返回缓存的模型）
+            # OURS：get_deployed_model 会检查是否需要动态替换
+            arch = deploy_algo.get_deployed_model(nid, request_task, node, t, tables)
             if arch is None:
                 continue
 
