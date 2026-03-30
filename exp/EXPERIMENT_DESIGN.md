@@ -122,6 +122,11 @@
 - $U_{route} = \theta_1 \cdot \widehat{S} - \theta_2 \cdot \widehat{R}_{E2E} - \theta_3 \cdot \widehat{P}$
 - 端到端时延含排队 + 推理 + 可选云边拉取
 
+**关键特性：动态模型替换**
+- 基线算法在初始化时选择模型，仿真运行期间模型固定不变
+- OURS 在运行时检测负载变化，当负载变化超过 30% 阈值时触发模型替换
+- 这使得 OURS 能够在高负载时降级到轻量模型保证稳定性，低负载时选择高精度模型
+
 ### 6.2 论文 A 基线 (TPDS 2023)
 
 #### RLS (Random Local Search)
