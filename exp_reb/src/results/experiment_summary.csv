@@ -1,10 +1,10 @@
 algorithm,avg_latency,success_rate,deployment_cost,param,value
 ffd-m,316.70932435679526,0.8,1,arrival_rate,1.0
-drs,316.65838263470704,0.8,11,arrival_rate,1.0
-lego,313.9286611670077,0.8,3,arrival_rate,1.0
+drs,314.6115824269058,0.8,17,arrival_rate,1.0
+lego,313.364383928278,0.8,4,arrival_rate,1.0
 ffd-m,346.07379185579987,0.8,4,arrival_rate,20.0
-drs,18333.50940863507,0.6,7,arrival_rate,20.0
-lego,18328.88841770993,0.6,6,arrival_rate,20.0
+drs,343.82521332508776,0.8,8,arrival_rate,20.0
+lego,344.36972400253586,0.8,8,arrival_rate,20.0
 ffd-m,713.923670451817,0.8,7,arrival_rate,50.0
-drs,92771.23730700887,0.8,7,arrival_rate,50.0
-lego,93001.28739944127,0.6,8,arrival_rate,50.0
+drs,274.3313839524736,0.8,4,arrival_rate,50.0
+lego,274.02600838271934,0.8,5,arrival_rate,50.0

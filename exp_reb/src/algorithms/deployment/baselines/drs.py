@@ -96,9 +96,12 @@ class DRSAlgorithm(DeploymentAlgorithm):
             # Calculate number of instances needed based on arrival rate
             total_rate = service_rates.get(service_id, 0)
             # μ = ver.mu (requests per second per instance)
-            # Need at least ceil(λ/μ) instances for stability
+            # Need ceil(λ/μ) + margin instances to keep ρ < 0.9
             if ver.mu > 0:
-                min_instances = max(1, int(total_rate / ver.mu) + 1)
+                base_instances = int(total_rate / ver.mu) + 1
+                # Add margin to keep utilization below 90%
+                margin = 2 if total_rate > 20 else 1
+                min_instances = max(1, base_instances + margin)
             else:
                 min_instances = 1
 

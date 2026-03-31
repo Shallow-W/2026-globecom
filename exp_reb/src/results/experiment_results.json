@@ -9,17 +9,17 @@
   },
   {
     "algorithm": "drs",
-    "avg_latency": 316.65838263470704,
+    "avg_latency": 314.6115824269058,
     "success_rate": 0.8,
-    "deployment_cost": 11,
+    "deployment_cost": 17,
     "param": "arrival_rate",
     "value": 1.0
   },
   {
     "algorithm": "lego",
-    "avg_latency": 313.9286611670077,
+    "avg_latency": 313.364383928278,
     "success_rate": 0.8,
-    "deployment_cost": 3,
+    "deployment_cost": 4,
     "param": "arrival_rate",
     "value": 1.0
   },
@@ -33,17 +33,17 @@
   },
   {
     "algorithm": "drs",
-    "avg_latency": 18333.50940863507,
-    "success_rate": 0.6,
-    "deployment_cost": 7,
+    "avg_latency": 343.82521332508776,
+    "success_rate": 0.8,
+    "deployment_cost": 8,
     "param": "arrival_rate",
     "value": 20.0
   },
   {
     "algorithm": "lego",
-    "avg_latency": 18328.88841770993,
-    "success_rate": 0.6,
-    "deployment_cost": 6,
+    "avg_latency": 344.36972400253586,
+    "success_rate": 0.8,
+    "deployment_cost": 8,
     "param": "arrival_rate",
     "value": 20.0
   },
@@ -57,17 +57,17 @@
   },
   {
     "algorithm": "drs",
-    "avg_latency": 92771.23730700887,
+    "avg_latency": 274.3313839524736,
     "success_rate": 0.8,
-    "deployment_cost": 7,
+    "deployment_cost": 4,
     "param": "arrival_rate",
     "value": 50.0
   },
   {
     "algorithm": "lego",
-    "avg_latency": 93001.28739944127,
-    "success_rate": 0.6,
-    "deployment_cost": 8,
+    "avg_latency": 274.02600838271934,
+    "success_rate": 0.8,
+    "deployment_cost": 5,
     "param": "arrival_rate",
     "value": 50.0
   }

@@ -77,7 +77,9 @@ class LEGOAlgorithm(DeploymentAlgorithm):
                     ver = services[service_id].get_version(version)
                     total_rate = service_rates.get(service_id, 0)
                     if ver and ver.mu > 0:
-                        instances = max(1, int(total_rate / ver.mu) + 1)
+                        base_instances = int(total_rate / ver.mu) + 1
+                        margin = 2 if total_rate > 20 else 1
+                        instances = max(1, base_instances + margin)
                     else:
                         instances = 1
 
