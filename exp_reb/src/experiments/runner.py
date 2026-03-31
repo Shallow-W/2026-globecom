@@ -14,6 +14,7 @@ from algorithms.deployment.baselines import (
     SimpleGreedyM,
     CoLocatedDeploymentM,
     LEGOAlgorithm,
+    DRSAlgorithm,
 )
 from algorithms.deployment.ours import OurAlgorithm
 
@@ -248,6 +249,8 @@ class ExperimentRunner:
             return CoLocatedDeploymentM()
         elif name_lower == "lego":
             return LEGOAlgorithm()
+        elif name_lower == "drs":
+            return DRSAlgorithm()
         elif name_lower == "our":
             # Our算法需要excel_model_path
             excel_path = self.config.get("excel_model_path")

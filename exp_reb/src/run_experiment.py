@@ -7,7 +7,7 @@
   python run_experiment.py                    # 运行基本实验
   python run_experiment.py --algo ffd-m cds-m our  # 指定算法
   python run_experiment.py --perturb arrival_rate 1,20,50,100  # 扰动实验
-python run_experiment.py --perturb arrival_rate 1,20,50,100  # 扰动实验
+python run_experiment.py --perturb arrival_rate 1,20,30,40,50,60  # 扰动实验
 算法列表:
   ffd-m      - First Fit Decreasing (固定Model-M)
   random-m   - Random Deployment (固定Model-M)

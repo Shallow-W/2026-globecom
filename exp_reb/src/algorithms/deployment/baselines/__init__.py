@@ -5,6 +5,7 @@ from algorithms.deployment.baselines.random_m import RandomDeploymentM
 from algorithms.deployment.baselines.greedy_m import SimpleGreedyM
 from algorithms.deployment.baselines.cds_m import CoLocatedDeploymentM
 from algorithms.deployment.baselines.lego import LEGOAlgorithm
+from algorithms.deployment.baselines.drs import DRSAlgorithm
 
 __all__ = [
     "FirstFitDecreasingM",
@@ -12,4 +13,5 @@ __all__ = [
     "SimpleGreedyM",
     "CoLocatedDeploymentM",
     "LEGOAlgorithm",
+    "DRSAlgorithm",
 ]
