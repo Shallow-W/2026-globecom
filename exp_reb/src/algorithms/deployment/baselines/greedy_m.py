@@ -6,47 +6,9 @@ Baseline algorithm that:
 2. For each service, selects the node with most remaining resources
 """
 
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any
 from algorithms.deployment.base import DeploymentAlgorithm
-
-
-class DeploymentPlan:
-    """
-    Simple deployment plan for baseline algorithms.
-
-    placement: {(service_id, node_id): {version_id: count}}
-    """
-
-    def __init__(self):
-        self.placement: Dict[Tuple[str, str], Dict[str, int]] = {}
-
-    def add(self, service_id: str, node_id: str, version_id: str, count: int = 1):
-        """Add deployment instance."""
-        key = (service_id, node_id)
-        if key not in self.placement:
-            self.placement[key] = {}
-        self.placement[key][version_id] = self.placement[key].get(version_id, 0) + count
-
-    def get_service_instances(self, service_id: str, version_id: str = None) -> int:
-        """Get total instances of a service (optionally for specific version)."""
-        if version_id:
-            return sum(v.get(version_id, 0) for (s, _), v in self.placement.items() if s == service_id)
-        return sum(sum(v.values()) for (s, _), v in self.placement.items() if s == service_id)
-
-    def get_node_instances(self, node_id: str) -> Dict[str, Dict[str, int]]:
-        """Get services deployed on a node."""
-        return {s: v for (s, n), v in self.placement.items() if n == node_id}
-
-    def get_version_usage(self) -> Dict[str, int]:
-        """Count total instances per version."""
-        usage: Dict[str, int] = {}
-        for (s, n), versions in self.placement.items():
-            for vid, count in versions.items():
-                usage[vid] = usage.get(vid, 0) + count
-        return usage
-
-    def __repr__(self) -> str:
-        return f"DeploymentPlan(placement={self.placement})"
+from core.service.deployment import DeploymentPlan
 
 
 class SimpleGreedyM(DeploymentAlgorithm):
@@ -64,7 +26,7 @@ class SimpleGreedyM(DeploymentAlgorithm):
 
     def deploy(self, topology: Any,
                services: Dict[str, Any],
-               chains: List[Any]) -> DeploymentPlan:
+               chains: List[Any]) -> 'DeploymentPlan':
         """
         Execute Greedy-M deployment.
 
@@ -90,8 +52,8 @@ class SimpleGreedyM(DeploymentAlgorithm):
             # Calculate total arrival rate for this service from all chains
             total_rate = 0.0
             for chain in chains:
-                if service_id in chain.get('services', []):
-                    total_rate += chain.get('arrival_rate', 0)
+                if hasattr(chain, 'services') and service_id in chain.services:
+                    total_rate += chain.arrival_rate
 
             # Calculate required instances based on arrival rate and service rate
             if total_rate > 0 and model_m_mu > 0:
@@ -117,10 +79,13 @@ class SimpleGreedyM(DeploymentAlgorithm):
 
         # Step 3: Track remaining resources on each node
         node_remaining: Dict[str, Dict[str, int]] = {}
-        for node_id, node in topology.get('nodes', {}).items():
+        nodes = topology.nodes if hasattr(topology, 'nodes') else topology.get('nodes', {})
+        for node_id, node in nodes.items():
+            cpu = node.cpu_cores if hasattr(node, 'cpu_cores') else node.get('cpu_cores', node.get('cpu', 0))
+            gpu = node.gpu_memory if hasattr(node, 'gpu_memory') else node.get('gpu_memory', node.get('gpu', 0))
             node_remaining[node_id] = {
-                'cpu': node.get('cpu_cores', node.get('cpu', 0)),
-                'gpu': node.get('gpu_memory', node.get('gpu', 0)),
+                'cpu': cpu,
+                'gpu': gpu,
             }
 
         # Step 4: Greedy deployment - select node with most remaining resources
