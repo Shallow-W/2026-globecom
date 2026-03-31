@@ -14,6 +14,7 @@ from algorithms.deployment.baselines import (
     SimpleGreedyM,
     CoLocatedDeploymentM,
 )
+from algorithms.deployment.ours import OurAlgorithm
 
 
 class ExperimentRunner:
@@ -197,6 +198,13 @@ class ExperimentRunner:
             return SimpleGreedyM()
         elif name_lower == "cds-m":
             return CoLocatedDeploymentM()
+        elif name_lower == "our":
+            # Our算法需要excel_model_path
+            excel_path = self.config.get("excel_model_path")
+            if excel_path:
+                return OurAlgorithm({"excel_model_path": excel_path})
+            else:
+                raise ValueError("Our algorithm requires excel_model_path in config")
         else:
             raise ValueError(f"Unknown algorithm: {name}. "
-                           f"Available: ffd-m, random-m, greedy-m, cds-m")
+                           f"Available: ffd-m, random-m, greedy-m, cds-m, our")

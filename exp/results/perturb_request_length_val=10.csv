@@ -1,0 +1,3 @@
+algorithm,avg_latency_ms,success_rate,sla_violation_rate,throughput,avg_pull_delay_ms,pull_count,node_utilization_avg,total_requests,perf_room_layout,perf_segmentsemantic,perf_class_object,perf_class_scene,perf_normal,perf_autoencoder,perf_jigsaw
+RLS,3907.91,0.2305,0.7695,10.01,264.49,90,0.0421,4342,-0.6269,24.6527,50.5474,62.4154,0.5803,0.5397,64.6198
+OURS,1624.86,0.6958,0.3042,30.21,170.17,33,0.0073,4342,-1.0954,17.6341,31.5219,12.0631,0.5033,0.3556,4.5359

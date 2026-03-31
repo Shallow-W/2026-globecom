@@ -7,7 +7,7 @@
   python run_experiment.py                    # 运行基本实验
   python run_experiment.py --algo ffd-m cds-m our  # 指定算法
   python run_experiment.py --perturb arrival_rate 1,20,50,100  # 扰动实验
-
+python run_experiment.py --perturb arrival_rate 1,20,50,100  # 扰动实验
 算法列表:
   ffd-m      - First Fit Decreasing (固定Model-M)
   random-m   - Random Deployment (固定Model-M)
@@ -42,13 +42,14 @@ def print_banner():
     print("=" * 60)
 
 
-def run_comparison_experiment(algorithms=None, seed=42):
+def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     """
     运行算法对比实验
 
     Args:
         algorithms: 算法列表, 如 ["ffd-m", "cds-m", "our"]
         seed: 随机种子
+        excel_path: Excel模型库路径 (用于Our算法)
     """
     if algorithms is None:
         algorithms = ["ffd-m", "cds-m", "random-m", "greedy-m"]
@@ -59,6 +60,11 @@ def run_comparison_experiment(algorithms=None, seed=42):
     # 使用默认配置生成数据
     config = DEFAULT_CONFIG.copy()
     config["seed"] = seed
+
+    # 如果有Excel路径且包含our算法，添加到配置
+    if excel_path and "our" in algorithms:
+        config["excel_model_path"] = excel_path
+        print(f"[Our算法] Excel模型库: {excel_path}")
 
     generator = DataGenerator(seed=seed)
     topology, services, chains = generator.generate_all(config)
@@ -105,7 +111,7 @@ def run_comparison_experiment(algorithms=None, seed=42):
     return results
 
 
-def run_perturbation_experiment(param_name, param_values, algorithms=None, seed=42):
+def run_perturbation_experiment(param_name, param_values, algorithms=None, seed=42, excel_path=None):
     """
     运行扰动实验
 
@@ -114,6 +120,7 @@ def run_perturbation_experiment(param_name, param_values, algorithms=None, seed=
         param_values: 参数值列表
         algorithms: 算法列表
         seed: 随机种子
+        excel_path: Excel模型库路径 (用于Our算法)
     """
     if algorithms is None:
         algorithms = ["ffd-m", "cds-m", "greedy-m"]
@@ -123,6 +130,11 @@ def run_perturbation_experiment(param_name, param_values, algorithms=None, seed=
 
     config = DEFAULT_CONFIG.copy()
     config["seed"] = seed
+
+    # 如果有Excel路径且包含our算法，添加到配置
+    if excel_path and "our" in algorithms:
+        config["excel_model_path"] = excel_path
+        print(f"[Our算法] Excel模型库: {excel_path}")
 
     generator = DataGenerator(seed=seed)
     runner = ExperimentRunner(config)
@@ -250,13 +262,16 @@ def main():
     if args.perturb and len(args.perturb) >= 2:
         param_name = args.perturb[0]
         param_values = [float(v) for v in args.perturb[1].split(",")]
-        results = run_perturbation_experiment(param_name, param_values, algorithms, args.seed)
-    # Our算法 + Excel
-    elif args.excel and "our" in algorithms:
-        results = run_our_algorithm_with_excel(args.excel, algorithms, args.seed)
-    # 普通实验
+        results = run_perturbation_experiment(
+            param_name, param_values, algorithms, args.seed, args.excel
+        )
+    # 普通实验 (或Our算法对比，需要Excel)
     else:
-        results = run_comparison_experiment(algorithms, args.seed)
+        if "our" in algorithms and not args.excel:
+            print("\n[警告] Our算法需要Excel模型库，使用 --excel 参数指定")
+            print("       暂时从算法列表中移除our")
+            algorithms = [a for a in algorithms if a != "our"]
+        results = run_comparison_experiment(algorithms, args.seed, args.excel)
 
     # 保存结果
     if results:

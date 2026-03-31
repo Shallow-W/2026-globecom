@@ -1,0 +1,5 @@
+algorithm,avg_latency,success_rate,deployment_cost,param,value
+ffd-m,673.1994171676822,0.0,4,arrival_rate,1.0
+cds-m,558.579872231326,0.0,4,arrival_rate,1.0
+ffd-m,975.8226643870909,0.0,8,arrival_rate,20.0
+cds-m,,0.0,7,arrival_rate,20.0

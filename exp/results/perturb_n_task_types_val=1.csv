@@ -1,0 +1,3 @@
+algorithm,avg_latency_ms,success_rate,sla_violation_rate,throughput,avg_pull_delay_ms,pull_count,node_utilization_avg,total_requests,perf_class_scene
+RLS,3867.4,0.2411,0.7589,10.55,167.0,15,0.0042,4376,62.4154
+OURS,24.04,1.0,0.0,43.76,24.53,28,0.0002,4376,39.19

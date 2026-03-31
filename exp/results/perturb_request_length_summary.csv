@@ -1,0 +1,7 @@
+perturb_value,algorithm,avg_latency_ms,success_rate,sla_violation_rate,node_utilization_avg
+2,RLS,2266.98,0.5772,0.4228,0.0421
+2,OURS,74.5,1.0,0.0,0.0105
+10,RLS,3907.91,0.2305,0.7695,0.0421
+10,OURS,1624.86,0.6958,0.3042,0.0073
+20,RLS,4116.05,0.1879,0.8121,0.0421
+20,OURS,1904.93,0.6244,0.3756,0.0064

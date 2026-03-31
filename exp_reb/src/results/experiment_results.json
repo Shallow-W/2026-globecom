@@ -1,0 +1,34 @@
+[
+  {
+    "algorithm": "ffd-m",
+    "avg_latency": 673.1994171676822,
+    "success_rate": 0.0,
+    "deployment_cost": 4,
+    "param": "arrival_rate",
+    "value": 1.0
+  },
+  {
+    "algorithm": "cds-m",
+    "avg_latency": 558.579872231326,
+    "success_rate": 0.0,
+    "deployment_cost": 4,
+    "param": "arrival_rate",
+    "value": 1.0
+  },
+  {
+    "algorithm": "ffd-m",
+    "avg_latency": 975.8226643870909,
+    "success_rate": 0.0,
+    "deployment_cost": 8,
+    "param": "arrival_rate",
+    "value": 20.0
+  },
+  {
+    "algorithm": "cds-m",
+    "avg_latency": NaN,
+    "success_rate": 0.0,
+    "deployment_cost": 7,
+    "param": "arrival_rate",
+    "value": 20.0
+  }
+]
