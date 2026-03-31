@@ -84,16 +84,20 @@ class ExperimentRunner:
                 **lat
             })
 
-        # Aggregate metrics
-        total_lat = sum(c["total"] for c in chain_latencies)
-        avg_lat = total_lat / len(chain_latencies) if chain_latencies else 0
+        # Aggregate metrics (exclude unrealizable chains from latency average)
+        valid_latencies = [c["total"] for c in chain_latencies if not c.get("unrealizable") and c["total"] != float('inf')]
+        total_lat = sum(valid_latencies) if valid_latencies else 0
+        avg_lat = total_lat / len(valid_latencies) if valid_latencies else float('inf')
 
         # Resource utilization
         util = analyzer.calc_resource_utilization(plan)
 
-        # Success rate (chains meeting latency constraint)
+        # Success rate (chains meeting latency constraint AND realizable)
         success = 0
         for c in chain_latencies:
+            # Unrealizable chains (couldn't be deployed) don't count as success
+            if c.get("unrealizable") or c["total"] == float('inf'):
+                continue
             chain_constraint = next(
                 (ch.max_latency for ch in chains if ch.chain_id == c["chain_id"]),
                 float('inf')
@@ -173,6 +177,9 @@ class ExperimentRunner:
             elif param_name == "n_task_types":
                 # Regenerate chains with different task types
                 perturbed_chains = self._perturb_chains_task_types(base_chains, value, base_config)
+            elif param_name == "chain_length":
+                # Regenerate chains with different length
+                perturbed_chains = self._perturb_chains_length(base_chains, int(value), base_config, generator)
             else:
                 # For other parameters, regenerate normally
                 config = base_config.copy()
@@ -220,6 +227,28 @@ class ExperimentRunner:
                 arrival_rate=chain.arrival_rate,
                 max_latency=chain.max_latency,
                 task_type=new_task_type
+            )
+            perturbed_chains.append(new_chain)
+        return perturbed_chains
+
+    def _perturb_chains_length(self, base_chains, new_length: int, config: Dict, generator):
+        """Regenerate chains with different length."""
+        import random
+
+        service_ids = list(range(config.get("num_services", 10)))
+        perturbed_chains = []
+
+        for chain in base_chains:
+            # Adjust chain length
+            length = min(new_length, len(service_ids))
+            # Randomly select services for the chain
+            new_services = random.sample(service_ids, length)
+            new_chain = ServiceChain(
+                chain_id=chain.chain_id,
+                services=[f"s{s}" for s in new_services],
+                arrival_rate=chain.arrival_rate,
+                max_latency=chain.max_latency,
+                task_type=chain.task_type
             )
             perturbed_chains.append(new_chain)
         return perturbed_chains

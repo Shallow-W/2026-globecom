@@ -9,15 +9,15 @@
   },
   {
     "algorithm": "drs",
-    "avg_latency": 315.40409997704677,
+    "avg_latency": 314.3990976637078,
     "success_rate": 0.8,
-    "deployment_cost": 10,
+    "deployment_cost": 14,
     "param": "arrival_rate",
     "value": 1.0
   },
   {
     "algorithm": "lego",
-    "avg_latency": 313.74554482781167,
+    "avg_latency": 313.60814420514873,
     "success_rate": 0.8,
     "deployment_cost": 4,
     "param": "arrival_rate",
@@ -65,17 +65,17 @@
   },
   {
     "algorithm": "drs",
-    "avg_latency": 243.57729705767807,
+    "avg_latency": 335.92560739025373,
     "success_rate": 0.8,
-    "deployment_cost": 14,
+    "deployment_cost": 10,
     "param": "arrival_rate",
     "value": 20.0
   },
   {
     "algorithm": "lego",
-    "avg_latency": 343.4407258651587,
+    "avg_latency": 344.1372628504854,
     "success_rate": 0.8,
-    "deployment_cost": 6,
+    "deployment_cost": 7,
     "param": "arrival_rate",
     "value": 20.0
   },
@@ -113,25 +113,137 @@
   },
   {
     "algorithm": "ffd-m",
-    "avg_latency": 713.923670451817,
+    "avg_latency": 393.8023955210075,
     "success_rate": 0.8,
+    "deployment_cost": 6,
+    "param": "arrival_rate",
+    "value": 30.0
+  },
+  {
+    "algorithm": "drs",
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 6,
+    "param": "arrival_rate",
+    "value": 30.0
+  },
+  {
+    "algorithm": "lego",
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 5,
+    "param": "arrival_rate",
+    "value": 30.0
+  },
+  {
+    "algorithm": "cds-m",
+    "avg_latency": 458.18140041989,
+    "success_rate": 0.8,
+    "deployment_cost": 5,
+    "param": "arrival_rate",
+    "value": 30.0
+  },
+  {
+    "algorithm": "random-m",
+    "avg_latency": 394.016733537385,
+    "success_rate": 0.8,
+    "deployment_cost": 7,
+    "param": "arrival_rate",
+    "value": 30.0
+  },
+  {
+    "algorithm": "greedy-m",
+    "avg_latency": 394.11732061209034,
+    "success_rate": 0.8,
+    "deployment_cost": 7,
+    "param": "arrival_rate",
+    "value": 30.0
+  },
+  {
+    "algorithm": "our",
+    "avg_latency": 314.06586091043545,
+    "success_rate": 0.8,
+    "deployment_cost": 1,
+    "param": "arrival_rate",
+    "value": 30.0
+  },
+  {
+    "algorithm": "ffd-m",
+    "avg_latency": 510.53711615525674,
+    "success_rate": 0.8,
+    "deployment_cost": 7,
+    "param": "arrival_rate",
+    "value": 40.0
+  },
+  {
+    "algorithm": "drs",
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 4,
+    "param": "arrival_rate",
+    "value": 40.0
+  },
+  {
+    "algorithm": "lego",
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 6,
+    "param": "arrival_rate",
+    "value": 40.0
+  },
+  {
+    "algorithm": "cds-m",
+    "avg_latency": 670.5360788837188,
+    "success_rate": 0.6,
+    "deployment_cost": 6,
+    "param": "arrival_rate",
+    "value": 40.0
+  },
+  {
+    "algorithm": "random-m",
+    "avg_latency": 277.13300774961493,
+    "success_rate": 0.6,
+    "deployment_cost": 8,
+    "param": "arrival_rate",
+    "value": 40.0
+  },
+  {
+    "algorithm": "greedy-m",
+    "avg_latency": 510.9301979436488,
+    "success_rate": 0.8,
+    "deployment_cost": 8,
+    "param": "arrival_rate",
+    "value": 40.0
+  },
+  {
+    "algorithm": "our",
+    "avg_latency": 318.3365303908578,
+    "success_rate": 0.8,
+    "deployment_cost": 1,
+    "param": "arrival_rate",
+    "value": 40.0
+  },
+  {
+    "algorithm": "ffd-m",
+    "avg_latency": 1120.626311974325,
+    "success_rate": 0.4,
     "deployment_cost": 7,
     "param": "arrival_rate",
     "value": 50.0
   },
   {
     "algorithm": "drs",
-    "avg_latency": 274.2779010057359,
-    "success_rate": 0.8,
-    "deployment_cost": 5,
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 0,
     "param": "arrival_rate",
     "value": 50.0
   },
   {
     "algorithm": "lego",
-    "avg_latency": 314.5532572158933,
-    "success_rate": 0.8,
-    "deployment_cost": 6,
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 0,
     "param": "arrival_rate",
     "value": 50.0
   },
@@ -145,16 +257,16 @@
   },
   {
     "algorithm": "random-m",
-    "avg_latency": 670.6922224688637,
-    "success_rate": 0.8,
+    "avg_latency": 234.7496255413384,
+    "success_rate": 0.2,
     "deployment_cost": 4,
     "param": "arrival_rate",
     "value": 50.0
   },
   {
     "algorithm": "greedy-m",
-    "avg_latency": 714.0080770862655,
-    "success_rate": 0.8,
+    "avg_latency": 1120.766989698406,
+    "success_rate": 0.4,
     "deployment_cost": 8,
     "param": "arrival_rate",
     "value": 50.0
@@ -166,5 +278,61 @@
     "deployment_cost": 1,
     "param": "arrival_rate",
     "value": 50.0
+  },
+  {
+    "algorithm": "ffd-m",
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 6,
+    "param": "arrival_rate",
+    "value": 60.0
+  },
+  {
+    "algorithm": "drs",
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 0,
+    "param": "arrival_rate",
+    "value": 60.0
+  },
+  {
+    "algorithm": "lego",
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 0,
+    "param": "arrival_rate",
+    "value": 60.0
+  },
+  {
+    "algorithm": "cds-m",
+    "avg_latency": null,
+    "success_rate": 0.0,
+    "deployment_cost": 5,
+    "param": "arrival_rate",
+    "value": 60.0
+  },
+  {
+    "algorithm": "random-m",
+    "avg_latency": 511.82483770349427,
+    "success_rate": 0.0,
+    "deployment_cost": 5,
+    "param": "arrival_rate",
+    "value": 60.0
+  },
+  {
+    "algorithm": "greedy-m",
+    "avg_latency": Infinity,
+    "success_rate": 0.0,
+    "deployment_cost": 6,
+    "param": "arrival_rate",
+    "value": 60.0
+  },
+  {
+    "algorithm": "our",
+    "avg_latency": 375.94172777759553,
+    "success_rate": 0.8,
+    "deployment_cost": 1,
+    "param": "arrival_rate",
+    "value": 60.0
   }
 ]

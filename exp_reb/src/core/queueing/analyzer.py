@@ -65,7 +65,14 @@ class QueueingNetworkAnalyzer:
             # 获取服务部署的节点
             node_id = self._find_service_node(service_id, deployment)
             if not node_id:
-                continue
+                # Service not deployed - this chain is UNREALIZABLE
+                return {
+                    "total": float('inf'),  # Mark as failed
+                    "queuing": float('inf'),
+                    "processing": float('inf'),
+                    "communication": float('inf'),
+                    "unrealizable": True
+                }
 
             service_cfg = self.services[service_id]
 
