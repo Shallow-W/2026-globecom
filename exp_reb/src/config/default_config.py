@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
     },
 
     # Service chain
-    "num_chains": 5,
+    "num_chains": 15,
     "arrival_rate_range": [1, 50],     # 到达率 λ
     "chain_length_range": [2, 5],
     "max_latency": 500.0,              # ms (SLA延迟约束)
