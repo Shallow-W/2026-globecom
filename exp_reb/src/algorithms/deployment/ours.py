@@ -64,6 +64,12 @@ class OurDeployment:
         # Get topology nodes
         nodes = topology.get('nodes', {}) if isinstance(topology, dict) else getattr(topology, 'nodes', {})
 
+        # Calculate total arrival rate per service
+        service_rates = {}
+        for chain in chains:
+            for service_id in chain.services:
+                service_rates[service_id] = service_rates.get(service_id, 0) + chain.arrival_rate
+
         # Deploy each chain's services to appropriate nodes
         for chain in chains:
             # Extract chain properties
@@ -88,13 +94,26 @@ class OurDeployment:
                     node_id = best_node['node_id']
                     best_model = best_node['model']
 
+                    # Calculate instances needed based on arrival rate
+                    total_rate = service_rates.get(service_id, 0)
+                    # Use Model-M's μ (≈10) for instance calculation as baseline
+                    # This ensures stability regardless of which model Our selects
+                    mu_baseline = 10.0
+
+                    if mu_baseline > 0:
+                        base_instances = int(total_rate / mu_baseline) + 1
+                        margin = 2 if total_rate > 20 else 1
+                        instances = max(1, base_instances + margin)
+                    else:
+                        instances = 1
+
                     # Add deployment with selected model version
                     model_version = best_model.get('architecture', 'Model-M')
                     deployment_plan.add(
                         service_id=service_id,
                         node_id=node_id,
                         version_id=model_version,
-                        count=1
+                        count=instances
                     )
 
         return deployment_plan

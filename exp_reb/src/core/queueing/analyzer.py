@@ -69,12 +69,15 @@ class QueueingNetworkAnalyzer:
 
             service_cfg = self.services[service_id]
 
-            # Get version for this service
-            version_id = version_map.get(service_id, "Model-M")
-            version = service_cfg.get_version(version_id)
+            # Get deployed version from plan
+            actual_version_id = self._get_deployed_version(service_id, deployment)
+
+            # Get version - first try version_map, then actual deployed version, then fallback
+            version_id = version_map.get(service_id, actual_version_id or "Model-M")
+            version = service_cfg.get_version(version_id) if version_id else None
+
             if not version:
-                # Try to get from deployment plan's actual version
-                actual_version_id = self._get_deployed_version(service_id, deployment)
+                # Try actual deployed version
                 if actual_version_id:
                     version = service_cfg.get_version(actual_version_id)
             if not version:
@@ -85,7 +88,12 @@ class QueueingNetworkAnalyzer:
                 # Last resort: use default mu=10
                 version = type('Version', (), {'mu': 10, 'accuracy': 0.5})()
 
-            instances = deployment.get_service_instances(service_id, version_id)
+            # Get instances - use actual deployed version (not version_id) for lookup
+            lookup_version = actual_version_id or version_id
+            instances = deployment.get_service_instances(service_id, lookup_version)
+            if instances <= 0:
+                # Try getting total instances regardless of version
+                instances = deployment.get_service_instances(service_id)
             if instances <= 0:
                 instances = 1
 
