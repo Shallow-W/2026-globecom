@@ -34,6 +34,7 @@
 
 import sys
 import os
+import math
 
 # 添加src目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -113,11 +114,18 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     print("-" * 70)
 
     for r in results:
-        lat = r["avg_latency"]
-        lat_str = f"{lat:.2f}" if lat == lat else "N/A"
+        lat = r.get("avg_latency")
+        if lat is None or (isinstance(lat, float) and math.isnan(lat)):
+            lat_str = "N/A"
+        elif isinstance(lat, float) and math.isinf(lat):
+            lat_str = "Inf"
+        else:
+            lat_str = f"{lat:.2f}"
+        success = r.get("success_rate", 0)
+        cost = r.get("deployment_cost", 0)
         print(
             f"{r['algorithm']:<12} {lat_str:<18} "
-            f"{r['success_rate']:<12.1%} {r['deployment_cost']:<10}"
+            f"{success:<12.1%} {cost:<10}"
         )
 
     print("-" * 70)
@@ -188,11 +196,19 @@ def run_perturbation_experiment(
         print(f"{'算法':<12} {'平均延迟(ms)':<18} {'成功率':<12} {'使用节点数':<10}")
         print("-" * 55)
         for r in val_results:
-            lat = r["avg_latency"]
-            lat_str = f"{lat:.2f}" if lat == lat else "N/A"
+            lat = r.get("avg_latency")
+            # Handle nan and None
+            if lat is None or (isinstance(lat, float) and math.isnan(lat)):
+                lat_str = "N/A"
+            elif isinstance(lat, float) and math.isinf(lat):
+                lat_str = "Inf"
+            else:
+                lat_str = f"{lat:.2f}"
+            success = r.get("success_rate", 0)
+            cost = r.get("deployment_cost", 0)
             print(
                 f"{r['algorithm']:<12} {lat_str:<18} "
-                f"{r['success_rate']:<12.1%} {r['deployment_cost']:<10}"
+                f"{success:<12.1%} {cost:<10}"
             )
 
     return results
@@ -279,7 +295,7 @@ def main():
 
     args = parser.parse_args()
 
-    algorithms = args.algo if args.algo else ["ffd-m", "drs", "lego"]
+    algorithms = args.algo if args.algo else ["ffd-m", "drs", "lego", "cds-m", "random-m", "greedy-m", "our"]
 
     # 检查算法是否有效
     invalid_algos = [a for a in algorithms if a not in AVAILABLE_ALGORITHMS]

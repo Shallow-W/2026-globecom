@@ -62,7 +62,7 @@ class DRSAlgorithm(DeploymentAlgorithm):
         all_services = list(services.keys())
 
         # Step 1: Initialize - randomly deploy services to feasible nodes
-        self._initialize_deployment(plan, topology, services, version, rng)
+        self._initialize_deployment(plan, topology, services, chains, version, rng)
 
         # Step 2: Iterative improvement
         for iteration in range(self.max_iterations):
@@ -75,9 +75,16 @@ class DRSAlgorithm(DeploymentAlgorithm):
     def _initialize_deployment(self, plan: DeploymentPlan,
                               topology: Topology,
                               services: Dict[str, MicroService],
+                              chains: List[ServiceChain],
                               version: str,
                               rng: random.Random):
         """Initialize with random feasible deployment."""
+        # Calculate total arrival rate per service
+        service_rates = {}
+        for chain in chains:
+            for service_id in chain.services:
+                service_rates[service_id] = service_rates.get(service_id, 0) + chain.arrival_rate
+
         for service_id, service in services.items():
             ver = service.get_version(version)
             if not ver:
@@ -86,21 +93,30 @@ class DRSAlgorithm(DeploymentAlgorithm):
             cpu_needed = ver.cpu_per_instance
             gpu_needed = ver.gpu_per_instance
 
+            # Calculate number of instances needed based on arrival rate
+            total_rate = service_rates.get(service_id, 0)
+            # μ = ver.mu (requests per second per instance)
+            # Need at least ceil(λ/μ) instances for stability
+            if ver.mu > 0:
+                min_instances = max(1, int(total_rate / ver.mu) + 1)
+            else:
+                min_instances = 1
+
             # Find all feasible nodes
             feasible_nodes = [
                 node_id for node_id, node in topology.nodes.items()
-                if node.can_deploy(cpu_needed, gpu_needed)
+                if node.can_deploy(cpu_needed * min_instances, gpu_needed * min_instances)
             ]
 
             if feasible_nodes:
                 # Randomly select a node
                 selected_node = rng.choice(feasible_nodes)
-                plan.add(service_id, selected_node, version, 1)
+                plan.add(service_id, selected_node, version, min_instances)
 
-                # Update node state temporarily
+                # Update node state
                 node = topology.nodes[selected_node]
-                node.used_cpu += cpu_needed
-                node.used_gpu += gpu_needed
+                node.used_cpu += cpu_needed * min_instances
+                node.used_gpu += gpu_needed * min_instances
 
     def _iterate(self, plan: DeploymentPlan,
                 topology: Topology,

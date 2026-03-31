@@ -50,6 +50,12 @@ class LEGOAlgorithm(DeploymentAlgorithm):
         plan = DeploymentPlan()
         version = self.fixed_version
 
+        # Calculate total arrival rate per service
+        service_rates = {}
+        for chain in chains:
+            for service_id in chain.services:
+                service_rates[service_id] = service_rates.get(service_id, 0) + chain.arrival_rate
+
         # Build a map of chain_id -> set of nodes that already have services from this chain
         chain_nodes: Dict[str, set] = {c.chain_id: set() for c in chains}
 
@@ -67,15 +73,25 @@ class LEGOAlgorithm(DeploymentAlgorithm):
                 )
 
                 if node_id:
+                    # Calculate instances needed
+                    ver = services[service_id].get_version(version)
+                    total_rate = service_rates.get(service_id, 0)
+                    if ver and ver.mu > 0:
+                        instances = max(1, int(total_rate / ver.mu) + 1)
+                    else:
+                        instances = 1
+
                     # Add deployment
-                    plan.add(service_id, node_id, version, 1)
+                    plan.add(service_id, node_id, version, instances)
                     chain_nodes[chain.chain_id].add(node_id)
 
-                    # Update node state (simplified - just track what services are deployed)
+                    # Update node state
                     node = topology.nodes[node_id]
                     if not hasattr(node, 'deployed_services'):
                         node.deployed_services = set()
                     node.deployed_services.add(service_id)
+                    node.used_cpu += ver.cpu_per_instance * instances if ver else instances
+                    node.used_gpu += ver.gpu_per_instance * instances if ver else 0
 
         return plan
 
