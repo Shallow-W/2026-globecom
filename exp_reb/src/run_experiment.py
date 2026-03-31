@@ -4,21 +4,31 @@
 ==============================================================
 
 使用方法:
-  python run_experiment.py                    # 运行基本实验
-  python run_experiment.py --algo ffd-m cds-m our  # 指定算法
-  python run_experiment.py --perturb arrival_rate 1,20,50,100  # 扰动实验
-python run_experiment.py --perturb arrival_rate 1,20,30,40,50,60  # 扰动实验
+  # 基本对比实验
+  python run_experiment.py
+
+  # 指定算法
+  python run_experiment.py --algo ffd-m drs lego our
+
+  # 扰动实验
+  python run_experiment.py --perturb arrival_rate 1,20,50,100
+
+  # 完整示例
+  python run_experiment.py --algo ffd-m drs lego our --perturb arrival_rate 1,10,50 --seed 42
+
 算法列表:
-  ffd-m      - First Fit Decreasing (固定Model-M)
-  random-m   - Random Deployment (固定Model-M)
-  greedy-m   - Simple Greedy (固定Model-M)
-  cds-m      - Co-Located Deployment (固定Model-M)
-  our        - Our算法 (动态模型选择, 需要Excel模型库)
+  ffd-m      - First Fit Decreasing (论文baseline)
+  drs        - Dynamic Resource Scheduling (论文baseline)
+  lego       - Locality Enhanced Greedy (论文baseline)
+  cds-m      - Co-Located Deployment (对比用)
+  random-m   - Random Deployment
+  greedy-m   - Simple Greedy
+  our        - Our算法 (动态模型搜索)
 
 扰动实验参数:
-  arrival_rate       - 到达率 λ 变化
-  n_task_types       - 任务类型数量变化
-  request_length     - 请求长度变化
+  arrival_rate  - 到达率 λ 变化 (固定链结构)
+  n_task_types   - 任务类型数量变化
+
 ==============================================================
 """
 
@@ -43,7 +53,12 @@ def print_banner():
 
 
 # 固定Excel模型库路径
-DEFAULT_EXCEL_PATH = "d:/Item/lab/2026globcom/exp_reb/data/evaluation_tables_20260325_163931.xlsx"
+DEFAULT_EXCEL_PATH = (
+    "d:/Item/lab/2026globcom/exp_reb/data/evaluation_tables_20260325_163931.xlsx"
+)
+
+# 算法列表
+AVAILABLE_ALGORITHMS = ["ffd-m", "drs", "lego", "cds-m", "random-m", "greedy-m", "our"]
 
 
 def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
@@ -51,12 +66,12 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     运行算法对比实验
 
     Args:
-        algorithms: 算法列表, 如 ["ffd-m", "cds-m", "our"]
+        algorithms: 算法列表
         seed: 随机种子
-        excel_path: Excel模型库路径 (用于Our算法，默认使用固定路径)
+        excel_path: Excel模型库路径 (用于Our算法)
     """
     if algorithms is None:
-        algorithms = ["ffd-m", "cds-m", "random-m", "greedy-m"]
+        algorithms = ["ffd-m", "drs", "lego"]
 
     print_banner()
     print(f"\n[1] 生成测试数据 (seed={seed})...")
@@ -64,12 +79,6 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     # 使用默认配置生成数据
     config = DEFAULT_CONFIG.copy()
     config["seed"] = seed
-
-    # 如果包含our算法，使用Excel路径
-    if "our" in algorithms:
-        excel_path = excel_path or DEFAULT_EXCEL_PATH
-        config["excel_model_path"] = excel_path
-        print(f"[Our算法] Excel模型库: {excel_path}")
 
     generator = DataGenerator(seed=seed)
     topology, services, chains = generator.generate_all(config)
@@ -81,9 +90,17 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     # 打印服务链详情
     print("\n    服务链详情:")
     for chain in chains:
-        print(f"      {chain.chain_id}: λ={chain.arrival_rate:.2f}, "
-              f"延迟约束={chain.max_latency}ms, "
-              f"服务数={len(chain.services)}")
+        print(
+            f"      {chain.chain_id}: λ={chain.arrival_rate:.2f}, "
+            f"延迟约束={chain.max_latency}ms, "
+            f"服务数={len(chain.services)}"
+        )
+
+    # 如果包含our算法，使用Excel路径
+    if "our" in algorithms:
+        excel_path = excel_path or DEFAULT_EXCEL_PATH
+        config["excel_model_path"] = excel_path
+        print(f"\n[Our算法] Excel模型库: {excel_path}")
 
     print(f"\n[2] 运行实验: {algorithms}...")
 
@@ -92,12 +109,16 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
 
     print("\n[3] 实验结果:")
     print("-" * 70)
-    print(f"{'算法':<15} {'平均延迟(ms)':<18} {'成功率':<12} {'使用节点数':<10}")
+    print(f"{'算法':<12} {'平均延迟(ms)':<18} {'成功率':<12} {'使用节点数':<10}")
     print("-" * 70)
 
     for r in results:
-        print(f"{r['algorithm']:<15} {r['avg_latency']:<18.2f} "
-              f"{r['success_rate']:<12.2%} {r['deployment_cost']:<10}")
+        lat = r["avg_latency"]
+        lat_str = f"{lat:.2f}" if lat == lat else "N/A"
+        print(
+            f"{r['algorithm']:<12} {lat_str:<18} "
+            f"{r['success_rate']:<12.1%} {r['deployment_cost']:<10}"
+        )
 
     print("-" * 70)
 
@@ -107,28 +128,30 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     for r in results:
         plan = r["deployment_plan"]
         valid, errors = validator.validate_deployment(plan, topology, services, chains)
-        status = "[OK] VALID" if valid else "[X] INVALID"
-        print(f"    {r['algorithm']}: {status}")
+        status = "[OK]" if valid else "[X]"
+        print(f"    {r['algorithm']:<12}: {status}")
         if errors:
-            for err in errors[:3]:  # 只显示前3个错误
+            for err in errors[:3]:
                 print(f"        - {err}")
 
     return results
 
 
-def run_perturbation_experiment(param_name, param_values, algorithms=None, seed=42, excel_path=None):
+def run_perturbation_experiment(
+    param_name, param_values, algorithms=None, seed=42, excel_path=None
+):
     """
-    运行扰动实验
+    运行扰动实验 (保持链结构不变，只改变指定参数)
 
     Args:
-        param_name: 扰动参数名 (arrival_rate, n_task_types, request_length)
+        param_name: 扰动参数名 (arrival_rate, n_task_types)
         param_values: 参数值列表
         algorithms: 算法列表
         seed: 随机种子
-        excel_path: Excel模型库路径 (用于Our算法，默认使用固定路径)
+        excel_path: Excel模型库路径
     """
     if algorithms is None:
-        algorithms = ["ffd-m", "cds-m", "greedy-m"]
+        algorithms = ["ffd-m", "drs", "lego"]
 
     print_banner()
     print(f"\n扰动实验: {param_name} = {param_values}")
@@ -150,87 +173,64 @@ def run_perturbation_experiment(param_name, param_values, algorithms=None, seed=
         param_name=param_name,
         param_values=param_values,
         algorithms=algorithms,
-        generator=generator
+        generator=generator,
     )
 
     # 按参数值分组显示
     print("\n结果汇总:")
     print("-" * 80)
 
-    # 获取该参数的唯一值
     unique_values = sorted(set(r["value"] for r in results))
 
     for val in unique_values:
         print(f"\n{param_name} = {val}:")
         val_results = [r for r in results if r["value"] == val]
-        print(f"{'算法':<15} {'平均延迟(ms)':<18} {'成功率':<12} {'使用节点数':<10}")
+        print(f"{'算法':<12} {'平均延迟(ms)':<18} {'成功率':<12} {'使用节点数':<10}")
         print("-" * 55)
         for r in val_results:
-            print(f"{r['algorithm']:<15} {r['avg_latency']:<18.2f} "
-                  f"{r['success_rate']:<12.2%} {r['deployment_cost']:<10}")
+            lat = r["avg_latency"]
+            lat_str = f"{lat:.2f}" if lat == lat else "N/A"
+            print(
+                f"{r['algorithm']:<12} {lat_str:<18} "
+                f"{r['success_rate']:<12.1%} {r['deployment_cost']:<10}"
+            )
 
     return results
 
 
-def run_our_algorithm_with_excel(excel_path, algorithms=None, seed=42):
-    """
-    运行包含Our算法的实验 (需要Excel模型库)
+def save_results(results, output_dir):
+    """保存结果到文件"""
+    import json
+    import pandas as pd
 
-    Args:
-        excel_path: Excel模型库路径
-        algorithms: 算法列表
-        seed: 随机种子
-    """
-    if algorithms is None:
-        algorithms = ["ffd-m", "cds-m", "our"]
+    os.makedirs(output_dir, exist_ok=True)
 
-    print_banner()
-    print(f"\n[注意] Our算法需要Excel模型库: {excel_path}")
+    # 准备可序列化数据
+    serializable = []
+    for r in results:
+        lat = r["avg_latency"]
+        serializable.append(
+            {
+                "algorithm": r["algorithm"],
+                "avg_latency": lat if lat == lat else None,  # NaN -> None
+                "success_rate": r["success_rate"],
+                "deployment_cost": r["deployment_cost"],
+                "param": r.get("param"),
+                "value": r.get("value"),
+            }
+        )
 
-    if not os.path.exists(excel_path):
-        print(f"\n[错误] Excel文件不存在: {excel_path}")
-        print("请先准备模型库文件，或不使用our算法")
-        return None
+    # 保存JSON
+    json_path = os.path.join(output_dir, "experiment_results.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(serializable, f, indent=2, ensure_ascii=False)
+    print(f"  JSON: {json_path}")
 
-    # 检查Our算法是否在列表中
-    if "our" in algorithms:
-        print("\n加载Our算法配置...")
-
-        # 读取Our算法的配置
-        from algorithms.deployment.ours import OurAlgorithm
-
-        # Our算法需要excel_path
-        our_config = {
-            "excel_model_path": excel_path
-        }
-
-        # 可以在此处覆盖runner的算法创建逻辑
-        # 目前runner暂不支持Our算法，需要手动调用
-        print("    Our算法已配置")
-
-    # 暂时先用baseline算法
-    baseline_algos = [a for a in algorithms if a != "our"]
-    if baseline_algos:
-        print(f"\n运行Baseline算法: {baseline_algos}")
-        results = run_comparison_experiment(baseline_algos, seed)
-    else:
-        results = []
-
-    print("\n[提示] Our算法需要在runner中手动配置ModelSearcher")
-    print("示例代码:")
-    print("""
-    from algorithms.deployment.ours import OurAlgorithm, ModelSearcher
-
-    # 创建模型搜索器
-    searcher = ModelSearcher(excel_path)
-    our_alg = OurAlgorithm({"excel_model_path": excel_path})
-
-    # 手动运行
-    deployment_plan = our_alg.deploy(topology, services, chains)
-    routing_plan = our_alg.solve(topology, services, chains)
-    """)
-
-    return results
+    # 保存CSV
+    csv_path = os.path.join(output_dir, "experiment_summary.csv")
+    df = pd.DataFrame(serializable)
+    df.to_csv(csv_path, index=False, encoding="utf-8")
+    print(f"  CSV: {csv_path}")
 
 
 def main():
@@ -241,28 +241,52 @@ def main():
         description="服务部署与路由实验",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+算法列表:
+  ffd-m      - First Fit Decreasing (论文baseline)
+  drs        - Dynamic Resource Scheduling (论文baseline)
+  lego       - Locality Enhanced Greedy (论文baseline)
+  cds-m      - Co-Located Deployment (对比用)
+  random-m   - Random Deployment
+  greedy-m   - Simple Greedy
+  our        - Our算法 (动态模型搜索)
+
 示例:
   python run_experiment.py
-  python run_experiment.py --algo ffd-m cds-m random-m
+  python run_experiment.py --algo ffd-m drs lego
   python run_experiment.py --perturb arrival_rate 1,10,50,100
-  python run_experiment.py --algo ffd-m our --excel ../data/model_library.xlsx
-        """
+  python run_experiment.py --algo ffd-m drs lego our --perturb arrival_rate 1,20,50 --seed 42
+        """,
     )
 
-    parser.add_argument("--algo", type=str, nargs="+",
-                       help="要运行的算法列表: ffd-m, random-m, greedy-m, cds-m, our")
-    parser.add_argument("--perturb", type=str, nargs="+",
-                       help="扰动实验: --perturb param_name value1,value2,value3")
-    parser.add_argument("--seed", type=int, default=42,
-                       help="随机种子 (默认: 42)")
-    parser.add_argument("--excel", type=str, default=None,
-                       help="Excel模型库路径 (用于Our算法)")
-    parser.add_argument("--output", type=str, default="results",
-                       help="结果输出目录")
+    parser.add_argument(
+        "--algo",
+        type=str,
+        nargs="+",
+        choices=AVAILABLE_ALGORITHMS,
+        help="要运行的算法列表",
+    )
+    parser.add_argument(
+        "--perturb",
+        type=str,
+        nargs="+",
+        help="扰动实验: --perturb param_name value1,value2,...",
+    )
+    parser.add_argument("--seed", type=int, default=42, help="随机种子 (默认: 42)")
+    parser.add_argument(
+        "--excel", type=str, default=None, help="Excel模型库路径 (用于Our算法)"
+    )
+    parser.add_argument("--output", type=str, default="results", help="结果输出目录")
 
     args = parser.parse_args()
 
-    algorithms = args.algo if args.algo else ["ffd-m", "cds-m", "random-m", "greedy-m"]
+    algorithms = args.algo if args.algo else ["ffd-m", "drs", "lego"]
+
+    # 检查算法是否有效
+    invalid_algos = [a for a in algorithms if a not in AVAILABLE_ALGORITHMS]
+    if invalid_algos:
+        print(f"[错误] 无效算法: {invalid_algos}")
+        print(f"可用算法: {AVAILABLE_ALGORITHMS}")
+        return
 
     # 扰动实验
     if args.perturb and len(args.perturb) >= 2:
@@ -273,47 +297,12 @@ def main():
         )
     # 普通实验
     else:
-        # our算法默认使用内置Excel路径
-        if "our" in algorithms:
-            effective_excel = args.excel if args.excel else DEFAULT_EXCEL_PATH
-            results = run_comparison_experiment(algorithms, args.seed, effective_excel)
-        else:
-            results = run_comparison_experiment(algorithms, args.seed, None)
+        results = run_comparison_experiment(algorithms, args.seed, args.excel)
 
     # 保存结果
     if results:
         save_results(results, args.output)
         print(f"\n结果已保存到: {args.output}/")
-
-
-def save_results(results, output_dir):
-    """保存结果到文件"""
-    import json
-    import pandas as pd
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    # 1. 保存JSON
-    json_path = os.path.join(output_dir, "experiment_results.json")
-    serializable = []
-    for r in results:
-        serializable.append({
-            "algorithm": r["algorithm"],
-            "avg_latency": r["avg_latency"],
-            "success_rate": r["success_rate"],
-            "deployment_cost": r["deployment_cost"],
-            "param": r.get("param"),
-            "value": r.get("value"),
-        })
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(serializable, f, indent=2, ensure_ascii=False)
-    print(f"  JSON: {json_path}")
-
-    # 2. 保存CSV汇总
-    csv_path = os.path.join(output_dir, "experiment_summary.csv")
-    df = pd.DataFrame(serializable)
-    df.to_csv(csv_path, index=False, encoding="utf-8")
-    print(f"  CSV: {csv_path}")
 
 
 if __name__ == "__main__":
