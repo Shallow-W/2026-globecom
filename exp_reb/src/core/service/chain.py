@@ -11,6 +11,7 @@ class ServiceChain:
     services: List[str]           # 服务ID顺序列表 [s1, s2, ..., sk]
     arrival_rate: float           # 到达率 λ (请求/秒)
     max_latency: float           # 最大容忍延迟 (ms)
+    task_type: str = "class_scene"  # 任务类型 (对应Excel中的sheet名)
 
     def __post_init__(self):
         """Initialize derived fields after construction."""

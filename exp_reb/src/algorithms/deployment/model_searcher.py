@@ -81,8 +81,29 @@ class ModelSearcher:
 
         try:
             df = pd.read_excel(self.excel_path, sheet_name=task_type)
-            # Convert DataFrame to list of dicts for easier processing
-            self.model_tables[task_type] = df.to_dict('records')
+            # 归一化处理：将model_params和flops归一化到[0,1]范围
+            # model_params: 43599~41435727 → 归一化后 0~1
+            # flops: 91M~8.4B → 归一化后 0~1
+            min_params = df['model_params'].min()
+            max_params = df['model_params'].max()
+            min_flops = df['flops'].min()
+            max_flops = df['flops'].max()
+
+            records = []
+            for _, row in df.iterrows():
+                record = {
+                    'architecture': row['architecture'],
+                    'proxy_score': float(row['proxy_score']),
+                    # 归一化到 [0, 1]，值越小表示资源需求越低
+                    'model_params': (row['model_params'] - min_params) / (max_params - min_params + 1e-10),
+                    'flops': (row['flops'] - min_flops) / (max_flops - min_flops + 1e-10),
+                    # 保存原始值用于参考
+                    '_raw_params': row['model_params'],
+                    '_raw_flops': row['flops'],
+                }
+                records.append(record)
+
+            self.model_tables[task_type] = records
         except Exception as e:
             print(f"Warning: Failed to load models for task type '{task_type}': {e}")
             self.model_tables[task_type] = []
@@ -159,8 +180,8 @@ class ModelSearcher:
 
         Args:
             task_type: Task type (e.g., 'class_scene').
-            M_max: Maximum available memory for deployment.
-            C_max: Node peak compute capability.
+            M_max: Maximum available memory for deployment (normalized 0-1).
+            C_max: Node peak compute capability (normalized 0-1).
             lambda_t: Current arrival rate.
             T_SLA: SLA latency constraint (ms).
             M_used: Currently used memory on node.
@@ -168,10 +189,16 @@ class ModelSearcher:
 
         Returns:
             List of candidate model dicts, sorted by utility (descending).
-            Each dict contains: architecture, proxy_score, model_params, flops, utility.
         """
-        # Step 1: Calculate dynamic compute红线
+        # Step 1: Calculate dynamic compute红线 (F_max is now normalized 0-1)
+        # 由于归一化后flops是0-1范围，需要重新计算F_max
+        # F_max = C_max / (λ + 1/T_SLA)，结果也在0-1范围
         F_max = self.calc_F_max(C_max, lambda_t, T_SLA)
+        # F_max现在应该在合理范围内，但做一下clip
+        F_max = max(0.0, min(1.0, F_max))
+
+        # M_max also normalized to 0-1
+        M_max_norm = max(0.0, min(1.0, M_max / 100.0))  # 假设M_max原是MB，归一化
 
         # Step 2: Load models from Excel if not already loaded
         if task_type not in self.model_tables:
@@ -182,13 +209,19 @@ class ModelSearcher:
             return []
 
         # Step 3: Hard constraint filtering (memory + compute)
-        # Excel columns: architecture=model_id, proxy_score=S_proxy,
-        #                model_params=P_model, flops=F_flops
+        # 归一化后值越小表示资源需求越低，所以用 <= 比较
         filtered = [
             m for m in candidates
-            if m.get('model_params', float('inf')) <= M_max
-            and m.get('flops', float('inf')) <= F_max
+            if m.get('model_params', 1.0) <= M_max_norm
+            and m.get('flops', 1.0) <= F_max
         ]
+
+        # 如果过滤后为空，放宽条件选择资源需求最低的几个
+        if not filtered and candidates:
+            # 按资源需求排序，选择资源需求最低的（flops和params都小）
+            sorted_by_resources = sorted(candidates,
+                key=lambda m: m.get('flops', 1.0) + m.get('model_params', 1.0))
+            filtered = sorted_by_resources[:3]  # 取最好的3个
 
         if not filtered:
             return []
@@ -200,6 +233,7 @@ class ModelSearcher:
 
         # Step 5: Calculate utility for each model and sort
         # U(a_k) = w1·S_proxy - w2·F_flops - w3·P_model
+        # 归一化后flops和model_params都是0-1，值越小越好
         def calc_utility(model: Dict) -> float:
             S_proxy = model.get('proxy_score', 0.0)
             F_flops = model.get('flops', 0.0)

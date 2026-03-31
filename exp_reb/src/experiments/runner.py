@@ -13,6 +13,7 @@ from algorithms.deployment.baselines import (
     RandomDeploymentM,
     SimpleGreedyM,
     CoLocatedDeploymentM,
+    LEGOAlgorithm,
 )
 from algorithms.deployment.ours import OurAlgorithm
 
@@ -158,22 +159,69 @@ class ExperimentRunner:
             List of experiment results with param and value fields added
         """
         results = []
+
+        # Generate base data once
+        base_topology, base_services, base_chains = generator.generate_all(base_config)
+
+        # Keep topology and services fixed, only vary chain parameters
         for value in param_values:
-            # Modify config with perturbed parameter
-            config = base_config.copy()
-            config[param_name] = value
+            # Clone chains with perturbed parameter
+            if param_name == "arrival_rate":
+                # Only vary arrival_rate, keep chain structure same
+                perturbed_chains = self._perturb_chains_arrival_rate(base_chains, value)
+            elif param_name == "n_task_types":
+                # Regenerate chains with different task types
+                perturbed_chains = self._perturb_chains_task_types(base_chains, value, base_config)
+            else:
+                # For other parameters, regenerate normally
+                config = base_config.copy()
+                config[param_name] = value
+                _, _, perturbed_chains = generator.generate_all(config)
 
-            # Generate data with perturbed config
-            topology, services, chains = generator.generate_all(config)
-
-            # Run comparison
-            exp_results = self.run_comparison(topology, services, chains, algorithms)
+            # Run comparison with perturbed chains
+            exp_results = self.run_comparison(base_topology, base_services, perturbed_chains, algorithms)
             for r in exp_results:
                 r["param"] = param_name
                 r["value"] = value
             results.extend(exp_results)
 
         return results
+
+    def _perturb_chains_arrival_rate(self, base_chains, arrival_rate: float):
+        """Create new chains with different arrival rate but same structure."""
+        from copy import deepcopy
+        perturbed_chains = []
+        for chain in base_chains:
+            new_chain = ServiceChain(
+                chain_id=chain.chain_id,
+                services=chain.services.copy(),
+                arrival_rate=arrival_rate,
+                max_latency=chain.max_latency,
+                task_type=chain.task_type
+            )
+            perturbed_chains.append(new_chain)
+        return perturbed_chains
+
+    def _perturb_chains_task_types(self, base_chains, n_types: int, config: Dict):
+        """Create new chains with different number of task types."""
+        task_types = config.get("task_types",
+            ["class_scene", "class_object", "room_layout", "jigsaw",
+             "segmentsemantic", "normal", "autoencoder"])
+        selected_types = task_types[:int(n_types)]
+
+        perturbed_chains = []
+        for chain in base_chains:
+            import random
+            new_task_type = random.choice(selected_types)
+            new_chain = ServiceChain(
+                chain_id=chain.chain_id,
+                services=chain.services.copy(),
+                arrival_rate=chain.arrival_rate,
+                max_latency=chain.max_latency,
+                task_type=new_task_type
+            )
+            perturbed_chains.append(new_chain)
+        return perturbed_chains
 
     def _create_deployment_algorithm(self, name: str):
         """
@@ -198,6 +246,8 @@ class ExperimentRunner:
             return SimpleGreedyM()
         elif name_lower == "cds-m":
             return CoLocatedDeploymentM()
+        elif name_lower == "lego":
+            return LEGOAlgorithm()
         elif name_lower == "our":
             # Our算法需要excel_model_path
             excel_path = self.config.get("excel_model_path")
@@ -207,4 +257,4 @@ class ExperimentRunner:
                 raise ValueError("Our algorithm requires excel_model_path in config")
         else:
             raise ValueError(f"Unknown algorithm: {name}. "
-                           f"Available: ffd-m, random-m, greedy-m, cds-m, our")
+                           f"Available: ffd-m, random-m, greedy-m, cds-m, lego, our")

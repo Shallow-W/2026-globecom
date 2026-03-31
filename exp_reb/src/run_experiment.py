@@ -42,6 +42,10 @@ def print_banner():
     print("=" * 60)
 
 
+# 固定Excel模型库路径
+DEFAULT_EXCEL_PATH = "d:/Item/lab/2026globcom/exp_reb/data/evaluation_tables_20260325_163931.xlsx"
+
+
 def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     """
     运行算法对比实验
@@ -49,7 +53,7 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     Args:
         algorithms: 算法列表, 如 ["ffd-m", "cds-m", "our"]
         seed: 随机种子
-        excel_path: Excel模型库路径 (用于Our算法)
+        excel_path: Excel模型库路径 (用于Our算法，默认使用固定路径)
     """
     if algorithms is None:
         algorithms = ["ffd-m", "cds-m", "random-m", "greedy-m"]
@@ -61,8 +65,9 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     config = DEFAULT_CONFIG.copy()
     config["seed"] = seed
 
-    # 如果有Excel路径且包含our算法，添加到配置
-    if excel_path and "our" in algorithms:
+    # 如果包含our算法，使用Excel路径
+    if "our" in algorithms:
+        excel_path = excel_path or DEFAULT_EXCEL_PATH
         config["excel_model_path"] = excel_path
         print(f"[Our算法] Excel模型库: {excel_path}")
 
@@ -120,7 +125,7 @@ def run_perturbation_experiment(param_name, param_values, algorithms=None, seed=
         param_values: 参数值列表
         algorithms: 算法列表
         seed: 随机种子
-        excel_path: Excel模型库路径 (用于Our算法)
+        excel_path: Excel模型库路径 (用于Our算法，默认使用固定路径)
     """
     if algorithms is None:
         algorithms = ["ffd-m", "cds-m", "greedy-m"]
@@ -131,8 +136,9 @@ def run_perturbation_experiment(param_name, param_values, algorithms=None, seed=
     config = DEFAULT_CONFIG.copy()
     config["seed"] = seed
 
-    # 如果有Excel路径且包含our算法，添加到配置
-    if excel_path and "our" in algorithms:
+    # 如果包含our算法，使用Excel路径
+    if "our" in algorithms:
+        excel_path = excel_path or DEFAULT_EXCEL_PATH
         config["excel_model_path"] = excel_path
         print(f"[Our算法] Excel模型库: {excel_path}")
 
@@ -265,13 +271,14 @@ def main():
         results = run_perturbation_experiment(
             param_name, param_values, algorithms, args.seed, args.excel
         )
-    # 普通实验 (或Our算法对比，需要Excel)
+    # 普通实验
     else:
-        if "our" in algorithms and not args.excel:
-            print("\n[警告] Our算法需要Excel模型库，使用 --excel 参数指定")
-            print("       暂时从算法列表中移除our")
-            algorithms = [a for a in algorithms if a != "our"]
-        results = run_comparison_experiment(algorithms, args.seed, args.excel)
+        # our算法默认使用内置Excel路径
+        if "our" in algorithms:
+            effective_excel = args.excel if args.excel else DEFAULT_EXCEL_PATH
+            results = run_comparison_experiment(algorithms, args.seed, effective_excel)
+        else:
+            results = run_comparison_experiment(algorithms, args.seed, None)
 
     # 保存结果
     if results:

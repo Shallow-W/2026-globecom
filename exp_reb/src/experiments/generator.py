@@ -136,6 +136,7 @@ class DataGenerator:
                 - arrival_rate_range: [min, max] arrival rate λ
                 - chain_length_range: [min, max] chain length
                 - max_latency: Maximum latency constraint in ms
+                - task_types: List of task types (default: Excel sheet names)
             services: Dictionary of available services
 
         Returns:
@@ -151,6 +152,11 @@ class DataGenerator:
             length_range = [length_range, length_range]
         max_latency = config.get("max_latency", 100.0)
 
+        # 任务类型列表 (对应Excel中的sheet名)
+        task_types = config.get("task_types",
+            ["class_scene", "class_object", "room_layout", "jigsaw",
+             "segmentsemantic", "normal", "autoencoder"])
+
         chains = []
         service_ids = list(services.keys())
 
@@ -164,11 +170,15 @@ class DataGenerator:
             # Random arrival rate
             rate = self.rng.uniform(rate_range[0], rate_range[1])
 
+            # Random task type
+            task_type = self.rng.choice(task_types)
+
             chains.append(ServiceChain(
                 chain_id=f"c{i}",
                 services=chain_services,
                 arrival_rate=rate,
-                max_latency=max_latency
+                max_latency=max_latency,
+                task_type=task_type
             ))
 
         return chains

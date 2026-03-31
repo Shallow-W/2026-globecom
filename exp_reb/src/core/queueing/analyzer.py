@@ -73,8 +73,17 @@ class QueueingNetworkAnalyzer:
             version_id = version_map.get(service_id, "Model-M")
             version = service_cfg.get_version(version_id)
             if not version:
+                # Try to get from deployment plan's actual version
+                actual_version_id = self._get_deployed_version(service_id, deployment)
+                if actual_version_id:
+                    version = service_cfg.get_version(actual_version_id)
+            if not version:
+                # Fallback to default Model-M
                 version_id = "Model-M"
                 version = service_cfg.get_version(version_id)
+            if not version:
+                # Last resort: use default mu=10
+                version = type('Version', (), {'mu': 10, 'accuracy': 0.5})()
 
             instances = deployment.get_service_instances(service_id, version_id)
             if instances <= 0:
@@ -118,6 +127,16 @@ class QueueingNetworkAnalyzer:
         for (s, n), versions in deployment.placement.items():
             if s == service_id and versions and sum(versions.values()) > 0:
                 return n
+        return None
+
+    def _get_deployed_version(self, service_id: str, deployment: 'DeploymentPlan') -> Optional[str]:
+        """获取服务部署时使用的版本ID"""
+        for (s, n), versions in deployment.placement.items():
+            if s == service_id and versions and sum(versions.values()) > 0:
+                # 返回第一个有部署的版本
+                for vid, count in versions.items():
+                    if count > 0:
+                        return vid
         return None
 
     def __repr__(self) -> str:
