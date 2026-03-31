@@ -43,17 +43,27 @@ class MMCQueue:
             return 1.0
         c = self.c
         rho = self.rho
+        crho = c * rho
 
-        # 分子
-        num = (c * rho) ** c / self._factorial(c)
+        # 数值稳定性保护: 当 rho 接近1或crho很大时，概率接近1
+        # crho^crho 会在溢出前快速变得非常大
+        if rho > 0.95 or crho > 50:
+            return 1.0
 
-        # 分母前半部分 (k=0 到 c-1)
-        sum_part = sum((c * rho) ** k / self._factorial(k) for k in range(c))
+        try:
+            # 分子
+            num = crho ** c / self._factorial(c)
 
-        # 分母后半部分
-        denom = sum_part + (c * rho) ** c / (self._factorial(c) * (1 - rho))
+            # 分母前半部分 (k=0 到 c-1)
+            sum_part = sum(crho ** k / self._factorial(k) for k in range(c))
 
-        return num / denom
+            # 分母后半部分
+            denom = sum_part + crho ** c / (self._factorial(c) * (1 - rho))
+
+            return num / denom
+        except OverflowError:
+            # 数值溢出时，返回接近1的概率 (系统高负载)
+            return 1.0
 
     def avg_queue_length(self) -> float:
         """平均队列长度 Lq = (cρ)^c * ρ * Pw / (c! * (1-ρ)^2)"""
@@ -62,7 +72,15 @@ class MMCQueue:
         c = self.c
         rho = self.rho
         pw = self.erlang_c()
-        return ((c * rho) ** c * rho * pw) / (self._factorial(c) * (1 - rho) ** 2)
+
+        # 数值稳定性: 当 rho 接近1时返回大值
+        if rho > 0.95 or (c * rho) > 50:
+            return float('inf')
+
+        try:
+            return ((c * rho) ** c * rho * pw) / (self._factorial(c) * (1 - rho) ** 2)
+        except OverflowError:
+            return float('inf')
 
     def avg_waiting_time(self) -> float:
         """平均等待时间 Wq = Lq / λ (ms)"""
