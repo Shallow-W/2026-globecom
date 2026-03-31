@@ -70,51 +70,77 @@ class OurDeployment:
             for service_id in chain.services:
                 service_rates[service_id] = service_rates.get(service_id, 0) + chain.arrival_rate
 
-        # Deploy each chain's services to appropriate nodes
+        # Collect unique task types for each service (use the first chain's task_type)
+        service_task_types = {}
         for chain in chains:
-            # Extract chain properties
-            chain_id = getattr(chain, 'chain_id', chain.get('chain_id', '')) if isinstance(chain, dict) else chain.chain_id
-            chain_services = getattr(chain, 'services', chain.get('services', [])) if isinstance(chain, dict) else chain.services
-            arrival_rate = getattr(chain, 'arrival_rate', chain.get('arrival_rate', 0.0)) if isinstance(chain, dict) else chain.arrival_rate
-            max_latency = getattr(chain, 'max_latency', chain.get('max_latency', 100.0)) if isinstance(chain, dict) else chain.max_latency
-            task_type = getattr(chain, 'task_type', chain.get('task_type', 'default')) if isinstance(chain, dict) else getattr(chain, 'task_type', 'default')
+            for service_id in chain.services:
+                if service_id not in service_task_types:
+                    service_task_types[service_id] = getattr(chain, 'task_type', 'default') if isinstance(chain, dict) else getattr(chain, 'task_type', 'default')
 
-            if not chain_services:
+        # Deploy each service ONCE (not per chain) to appropriate nodes
+        deployed_services = set()
+        for service_id, total_rate in service_rates.items():
+            if service_id in deployed_services:
                 continue
+            deployed_services.add(service_id)
 
-            # For each service in the chain
-            for service_id in chain_services:
-                # Find best node for this service
-                best_node = self._find_best_node(
-                    service_id, task_type, arrival_rate, max_latency,
-                    nodes, services, deployment_plan
+            task_type = service_task_types.get(service_id, 'default')
+
+            # Find best node for this service
+            best_node = self._find_best_node(
+                service_id, task_type, total_rate, 500.0,  # Use max_latency from config
+                nodes, services, deployment_plan
+            )
+
+            if best_node:
+                node_id = best_node['node_id']
+                best_model = best_node['model']
+
+                # Calculate instances needed based on arrival rate
+                mu_baseline = 10.0
+
+                if mu_baseline > 0:
+                    base_instances = int(total_rate / mu_baseline) + 1
+                    margin = 2 if total_rate > 20 else 1
+                    instances = max(1, base_instances + margin)
+                else:
+                    instances = 1
+
+                # Add deployment with selected model version
+                model_version = best_model.get('architecture', 'Model-M')
+
+                # Calculate mu from flops for queueing analysis
+                # Lower flops = higher mu (faster model)
+                flops = best_model.get('flops', 1e9)
+                if flops < 1e8:  # < 100M FLOPs -> Model-L (fast)
+                    mu = 20.0
+                    mapped_version = 'Model-L'
+                elif flops < 5e8:  # < 500M FLOPs -> Model-M (medium)
+                    mu = 10.0
+                    mapped_version = 'Model-M'
+                else:  # >= 500M FLOPs -> Model-H (slow)
+                    mu = 5.0
+                    mapped_version = 'Model-H'
+
+                deployment_plan.add(
+                    service_id=service_id,
+                    node_id=node_id,
+                    version_id=mapped_version,  # Use mapped version for lookup
+                    count=instances,
+                    mu=mu  # Store actual mu for queueing calculation
                 )
 
-                if best_node:
-                    node_id = best_node['node_id']
-                    best_model = best_node['model']
-
-                    # Calculate instances needed based on arrival rate
-                    total_rate = service_rates.get(service_id, 0)
-                    # Use Model-M's μ (≈10) for instance calculation as baseline
-                    # This ensures stability regardless of which model Our selects
-                    mu_baseline = 10.0
-
-                    if mu_baseline > 0:
-                        base_instances = int(total_rate / mu_baseline) + 1
-                        margin = 2 if total_rate > 20 else 1
-                        instances = max(1, base_instances + margin)
+                # Update node resource usage (critical for correct deployment)
+                node = nodes[node_id] if isinstance(nodes, dict) else nodes.get(node_id)
+                if node:
+                    gpu_per_inst = best_model.get('gpu_memory', 512)
+                    cpu_per_inst = best_model.get('cpu_cores', 1)
+                    if isinstance(node, dict):
+                        node['used_gpu'] = node.get('used_gpu', 0) + gpu_per_inst * instances
+                        node['used_cpu'] = node.get('used_cpu', 0) + cpu_per_inst * instances
                     else:
-                        instances = 1
-
-                    # Add deployment with selected model version
-                    model_version = best_model.get('architecture', 'Model-M')
-                    deployment_plan.add(
-                        service_id=service_id,
-                        node_id=node_id,
-                        version_id=model_version,
-                        count=instances
-                    )
+                        node.used_gpu = getattr(node, 'used_gpu', 0) + gpu_per_inst * instances
+                        node.used_cpu = getattr(node, 'used_cpu', 0) + cpu_per_inst * instances
 
         return deployment_plan
 

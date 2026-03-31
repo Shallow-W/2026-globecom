@@ -104,10 +104,15 @@ class QueueingNetworkAnalyzer:
             if instances <= 0:
                 instances = 1
 
+            # Get mu - prefer service_mu from Our algorithm, then version.mu
+            mu = deployment.service_mu.get(service_id)
+            if mu is None:
+                mu = version.mu if version else 10.0
+
             # M/M/C 排队延迟
             mmc = MMCQueue(
                 arrival_rate=chain.arrival_rate,
-                service_rate=version.mu,
+                service_rate=mu,
                 num_servers=instances
             )
             calc = mmc.calc()

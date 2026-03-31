@@ -16,13 +16,18 @@ class DeploymentPlan:
     """
     # 部署映射: {(service_id, node_id): {version_id: count}}
     placement: Dict[Tuple[str, str], Dict[str, int]] = field(default_factory=dict)
+    # 每个服务的mu值 (用于Our算法动态选择的模型)
+    service_mu: Dict[str, float] = field(default_factory=dict)
 
-    def add(self, service_id: str, node_id: str, version_id: str, count: int = 1) -> None:
+    def add(self, service_id: str, node_id: str, version_id: str, count: int = 1, mu: float = None) -> None:
         """添加部署实例"""
         key = (service_id, node_id)
         if key not in self.placement:
             self.placement[key] = {}
         self.placement[key][version_id] = self.placement[key].get(version_id, 0) + count
+        # 记录mu值 (用于延迟计算)
+        if mu is not None:
+            self.service_mu[service_id] = mu
 
     def get_service_instances(self, service_id: str, version_id: str = None) -> int:
         """获取服务总实例数 (可指定版本)"""
