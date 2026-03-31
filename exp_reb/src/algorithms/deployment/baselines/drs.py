@@ -175,14 +175,16 @@ class DRSAlgorithm(DeploymentAlgorithm):
 
         # Prefer moving to less loaded node
         if target_load < current_load:
-            # Perform the move
-            # Remove from current
-            if current_node in plan.placement.get((service_id, current_node), {}):
-                plan.placement[(service_id, current_node)][version] = 0
+            # Get current instances on this node
+            current_instances = 0
+            if (service_id, current_node) in plan.placement:
+                current_instances = plan.placement[(service_id, current_node)].get(version, 0)
 
-            # Add to target
-            plan.add(service_id, target_node, version, 1)
-            return True
+            if current_instances > 0:
+                # Move all instances to target
+                plan.placement[(service_id, current_node)][version] = 0
+                plan.add(service_id, target_node, version, current_instances)
+                return True
 
         return False
 
