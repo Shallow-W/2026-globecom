@@ -76,9 +76,18 @@ class CoLocatedDeploymentM(DeploymentAlgorithm):
                 if service_id in deployed_services:
                     continue
 
-                # Calculate required instances
-                if total_rate > 0 and model_m_mu > 0:
-                    instances = max(1, int(total_rate / model_m_mu) + 1)
+                # Calculate TOTAL arrival rate for this service across ALL chains
+                service_total_rate = 0.0
+                for c in chains:
+                    if hasattr(c, 'services') and service_id in c.services:
+                        service_total_rate += c.arrival_rate
+
+                # Calculate required instances with margin for stability
+                if service_total_rate > 0 and model_m_mu > 0:
+                    base_instances = int(service_total_rate / model_m_mu) + 1
+                    # Add margin to keep utilization below 90%
+                    margin = 2 if service_total_rate > 20 else 1
+                    instances = max(1, base_instances + margin)
                 else:
                     instances = 1
 
@@ -143,7 +152,9 @@ class CoLocatedDeploymentM(DeploymentAlgorithm):
                         total_rate += chain.arrival_rate
 
                 if total_rate > 0 and model_m_mu > 0:
-                    instances = max(1, int(total_rate / model_m_mu) + 1)
+                    base_instances = int(total_rate / model_m_mu) + 1
+                    margin = 2 if total_rate > 20 else 1
+                    instances = max(1, base_instances + margin)
                 else:
                     instances = 1
 

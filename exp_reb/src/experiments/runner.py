@@ -66,6 +66,10 @@ class ExperimentRunner:
                 - success_rate: Ratio of chains meeting latency constraints
                 - deployment_cost: Number of nodes used
         """
+        # Reset topology node state before each algorithm run
+        # (some algorithms modify node.used_cpu/used_gpu directly)
+        self._reset_topology_state(topology)
+
         # Get deployment algorithm
         alg = self._create_deployment_algorithm(algorithm_name)
 
@@ -252,6 +256,16 @@ class ExperimentRunner:
             )
             perturbed_chains.append(new_chain)
         return perturbed_chains
+
+    def _reset_topology_state(self, topology: Topology):
+        """Reset node state in topology to initial values."""
+        for node_id, node in topology.nodes.items():
+            if hasattr(node, 'used_cpu'):
+                node.used_cpu = 0
+            if hasattr(node, 'used_gpu'):
+                node.used_gpu = 0
+            if hasattr(node, 'deployed_services'):
+                node.deployed_services = set()
 
     def _create_deployment_algorithm(self, name: str):
         """

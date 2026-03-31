@@ -59,9 +59,16 @@ class LEGOAlgorithm(DeploymentAlgorithm):
         # Build a map of chain_id -> set of nodes that already have services from this chain
         chain_nodes: Dict[str, set] = {c.chain_id: set() for c in chains}
 
+        # Track deployed services to avoid redeploying
+        deployed_services = set()
+
         # Process each chain
         for chain in chains:
             for service_id in chain.services:
+                # Skip if service already deployed
+                if service_id in deployed_services:
+                    continue
+
                 # Find best node for this service
                 node_id = self._select_node(
                     service_id=service_id,
@@ -83,6 +90,21 @@ class LEGOAlgorithm(DeploymentAlgorithm):
                     else:
                         instances = 1
 
+                    # Calculate resource requirements for all instances
+                    cpu_for_instances = ver.cpu_per_instance * instances if ver else instances
+                    gpu_for_instances = ver.gpu_per_instance * instances if ver else 0
+
+                    # Recheck: node must have capacity for ALL instances
+                    node = topology.nodes[node_id]
+                    if not node.can_deploy(cpu_for_instances, gpu_for_instances):
+                        # Not enough capacity, find another node
+                        node_id = self._select_node_with_capacity(
+                            service_id, cpu_for_instances, gpu_for_instances,
+                            topology, chain_nodes, chain.chain_id
+                        )
+                        if not node_id:
+                            continue  # Skip this service if no node can hold all instances
+
                     # Add deployment
                     plan.add(service_id, node_id, version, instances)
                     chain_nodes[chain.chain_id].add(node_id)
@@ -94,6 +116,9 @@ class LEGOAlgorithm(DeploymentAlgorithm):
                     node.deployed_services.add(service_id)
                     node.used_cpu += ver.cpu_per_instance * instances if ver else instances
                     node.used_gpu += ver.gpu_per_instance * instances if ver else 0
+
+                    # Mark service as deployed
+                    deployed_services.add(service_id)
 
         return plan
 
@@ -159,6 +184,34 @@ class LEGOAlgorithm(DeploymentAlgorithm):
             load = getattr(node, 'load', 0.5)
             has_chain_service = 1 if node_id in locality_nodes else 0
             # Lower score is better: prioritize locality, then load
+            score = -has_chain_service * 1000 + load
+
+            if score < best_score:
+                best_score = score
+                best_node = node_id
+
+        return best_node
+
+    def _select_node_with_capacity(self, service_id: str,
+                                     cpu_required: float,
+                                     gpu_required: float,
+                                     topology: Topology,
+                                     chain_nodes: Dict[str, set],
+                                     chain_id: str) -> Optional[str]:
+        """
+        Select a node with capacity for the required instances.
+        Used when initial locality node doesn't have enough capacity.
+        """
+        best_node = None
+        best_score = float('inf')
+
+        for node_id, node in topology.nodes.items():
+            if not node.can_deploy(cpu_required, gpu_required):
+                continue
+
+            load = getattr(node, 'load', 0.5)
+            has_chain_service = 1 if node_id in chain_nodes.get(chain_id, set()) else 0
+            # Lower score is better
             score = -has_chain_service * 1000 + load
 
             if score < best_score:
