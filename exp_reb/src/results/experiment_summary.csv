@@ -1,9 +1,7 @@
 algorithm,avg_latency,success_rate,deployment_cost,param,value
-ffd-m,316.70932435679526,0.0,1,arrival_rate,1.0
-cds-m,313.41358331534826,0.0,2,arrival_rate,1.0
-ffd-m,346.07379185579987,0.0,4,arrival_rate,20.0
-cds-m,342.7596954399751,0.0,4,arrival_rate,20.0
-ffd-m,713.923670451817,0.2,7,arrival_rate,50.0
+ffd-m,316.70932435679526,0.8,1,arrival_rate,1.0
+cds-m,313.41358331534826,0.8,2,arrival_rate,1.0
+ffd-m,346.07379185579987,0.8,4,arrival_rate,20.0
+cds-m,342.7596954399751,0.8,4,arrival_rate,20.0
+ffd-m,713.923670451817,0.8,7,arrival_rate,50.0
 cds-m,,0.0,6,arrival_rate,50.0
-ffd-m,48941.750024303605,0.6,4,arrival_rate,100.0
-cds-m,,0.4,4,arrival_rate,100.0

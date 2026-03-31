@@ -37,7 +37,7 @@ DEFAULT_CONFIG = {
     "num_chains": 5,
     "arrival_rate_range": [1, 50],     # 到达率 λ
     "chain_length_range": [2, 5],
-    "max_latency": 100.0,              # ms
+    "max_latency": 500.0,              # ms (SLA延迟约束)
 
     # Experiment
     # Our算法: 动态模型选择

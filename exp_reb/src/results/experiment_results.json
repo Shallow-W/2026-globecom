@@ -2,7 +2,7 @@
   {
     "algorithm": "ffd-m",
     "avg_latency": 316.70932435679526,
-    "success_rate": 0.0,
+    "success_rate": 0.8,
     "deployment_cost": 1,
     "param": "arrival_rate",
     "value": 1.0
@@ -10,7 +10,7 @@
   {
     "algorithm": "cds-m",
     "avg_latency": 313.41358331534826,
-    "success_rate": 0.0,
+    "success_rate": 0.8,
     "deployment_cost": 2,
     "param": "arrival_rate",
     "value": 1.0
@@ -18,7 +18,7 @@
   {
     "algorithm": "ffd-m",
     "avg_latency": 346.07379185579987,
-    "success_rate": 0.0,
+    "success_rate": 0.8,
     "deployment_cost": 4,
     "param": "arrival_rate",
     "value": 20.0
@@ -26,7 +26,7 @@
   {
     "algorithm": "cds-m",
     "avg_latency": 342.7596954399751,
-    "success_rate": 0.0,
+    "success_rate": 0.8,
     "deployment_cost": 4,
     "param": "arrival_rate",
     "value": 20.0
@@ -34,7 +34,7 @@
   {
     "algorithm": "ffd-m",
     "avg_latency": 713.923670451817,
-    "success_rate": 0.2,
+    "success_rate": 0.8,
     "deployment_cost": 7,
     "param": "arrival_rate",
     "value": 50.0
@@ -46,21 +46,5 @@
     "deployment_cost": 6,
     "param": "arrival_rate",
     "value": 50.0
-  },
-  {
-    "algorithm": "ffd-m",
-    "avg_latency": 48941.750024303605,
-    "success_rate": 0.6,
-    "deployment_cost": 4,
-    "param": "arrival_rate",
-    "value": 100.0
-  },
-  {
-    "algorithm": "cds-m",
-    "avg_latency": NaN,
-    "success_rate": 0.4,
-    "deployment_cost": 4,
-    "param": "arrival_rate",
-    "value": 100.0
   }
 ]
