@@ -6,7 +6,12 @@ from typing import Any, Dict, List
 
 from .algorithms import create_algorithm
 from .evaluator import evaluate_matrix
-from .experiment_builder import build_context
+from .experiment_builder import (
+    build_context,
+    build_context_from_user_chains,
+    generate_user_chains,
+    scale_user_chain_rates,
+)
 
 
 class ExperimentRunner:
@@ -66,10 +71,22 @@ class ExperimentRunner:
         base_length: int = 4,
         base_rate: int = 200,
         seed: int = 42,
+        fixed_arrival_chains: bool = True,
     ) -> List[Dict[str, Any]]:
         """Run one perturbation axis while keeping the others fixed."""
 
         rows: List[Dict[str, Any]] = []
+
+        base_user_chains = None
+        if param_name == "arrival_rate" and fixed_arrival_chains:
+            base_user_chains, _ = generate_user_chains(
+                available_tasks=tasks_list,
+                num_types=base_num_types,
+                length=base_length,
+                total_rate=base_rate,
+                num_chains=4,
+                rng_seed=seed,
+            )
 
         for idx, value in enumerate(param_values):
             num_types = base_num_types
@@ -85,14 +102,21 @@ class ExperimentRunner:
             else:
                 raise ValueError(f"Unsupported perturbation parameter: {param_name}")
 
-            ctx = build_context(
-                tasks_list=tasks_list,
-                tasks_data=tasks_data,
-                num_types=num_types,
-                length=length,
-                total_rate=total_rate,
-                rng_seed=seed + idx,
-            )
+            if param_name == "arrival_rate" and fixed_arrival_chains and base_user_chains is not None:
+                user_chains = scale_user_chain_rates(base_user_chains, total_rate=total_rate)
+                ctx = build_context_from_user_chains(
+                    tasks_data=tasks_data,
+                    user_chains=user_chains,
+                )
+            else:
+                ctx = build_context(
+                    tasks_list=tasks_list,
+                    tasks_data=tasks_data,
+                    num_types=num_types,
+                    length=length,
+                    total_rate=total_rate,
+                    rng_seed=seed + idx,
+                )
 
             comparison = self.run_comparison(ctx, algorithms=algorithms, seed=seed + idx)
             for row in comparison:
