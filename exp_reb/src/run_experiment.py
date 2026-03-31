@@ -10,11 +10,18 @@
   # 指定算法
   python run_experiment.py --algo ffd-m drs lego our
 
-  # 扰动实验
-  python run_experiment.py --perturb arrival_rate 1,20,50,100
+  # 扰动实验（与exp_2保持一致）
+  # 到达率扰动（固定: num_types=10, length=4）
+  python run_experiment.py --perturb arrival_rate 100,200,300,400,500,600,700,800
+
+  # 链长度扰动（固定: num_types=10, rate=200）
+  python run_experiment.py --perturb chain_length 3,4,5,6,7,8,9,10
+
+  # 服务种类扰动（固定: length=4, rate=200）
+  python run_experiment.py --perturb n_task_types 10,20,30,40,50,60,70,80
 
   # 完整示例
-  python run_experiment.py --algo ffd-m drs lego our --perturb arrival_rate 1,10,50 --seed 42
+  python run_experiment.py --algo ffd-m drs lego our --perturb arrival_rate 100,200,400,600,800 --seed 42
 
 算法列表:
   ffd-m      - First Fit Decreasing (论文baseline)
@@ -110,9 +117,9 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
     results = runner.run_comparison(topology, services, chains, algorithms)
 
     print("\n[3] 实验结果:")
-    print("-" * 70)
-    print(f"{'算法':<12} {'平均延迟(ms)':<18} {'成功率':<12} {'使用节点数':<10}")
-    print("-" * 70)
+    print("-" * 110)
+    print(f"{'算法':<12} {'总延迟(ms)':<14} {'排队(ms)':<12} {'通信(ms)':<12} {'惩罚':<10} {'内存利用':<10} {'成功率':<10} {'节点数':<8}")
+    print("-" * 110)
 
     for r in results:
         lat = r.get("avg_latency")
@@ -122,11 +129,17 @@ def run_comparison_experiment(algorithms=None, seed=42, excel_path=None):
             lat_str = "Inf"
         else:
             lat_str = f"{lat:.2f}"
+
+        q = r.get("avg_queuing", 0)
+        comm = r.get("avg_communication", 0)
+        penalty = r.get("total_penalty", 0)
+        mem = r.get("mem_utilization", 0)
         success = r.get("success_rate", 0)
         cost = r.get("deployment_cost", 0)
+
         print(
-            f"{r['algorithm']:<12} {lat_str:<18} "
-            f"{success:<12.1%} {cost:<10}"
+            f"{r['algorithm']:<12} {lat_str:<14} {q:<12.2f} {comm:<12.2f} "
+            f"{penalty:<10.1f} {mem:<10.1%} {success:<10.1%} {cost:<8}"
         )
 
     print("-" * 70)
@@ -187,29 +200,32 @@ def run_perturbation_experiment(
 
     # 按参数值分组显示
     print("\n结果汇总:")
-    print("-" * 80)
+    print("-" * 110)
 
     unique_values = sorted(set(r["value"] for r in results))
 
     for val in unique_values:
         print(f"\n{param_name} = {val}:")
         val_results = [r for r in results if r["value"] == val]
-        print(f"{'算法':<12} {'平均延迟(ms)':<18} {'成功率':<12} {'使用节点数':<10}")
-        print("-" * 55)
+        print(f"{'算法':<12} {'总延迟(ms)':<14} {'排队(ms)':<12} {'通信(ms)':<12} {'惩罚':<10} {'内存利用':<10} {'成功率':<10} {'节点数':<8}")
+        print("-" * 82)
         for r in val_results:
             lat = r.get("avg_latency")
-            # Handle nan and None
             if lat is None or (isinstance(lat, float) and math.isnan(lat)):
                 lat_str = "N/A"
             elif isinstance(lat, float) and math.isinf(lat):
                 lat_str = "Inf"
             else:
                 lat_str = f"{lat:.2f}"
+            q = r.get("avg_queuing", 0)
+            comm = r.get("avg_communication", 0)
+            penalty = r.get("total_penalty", 0)
+            mem = r.get("mem_utilization", 0)
             success = r.get("success_rate", 0)
             cost = r.get("deployment_cost", 0)
             print(
-                f"{r['algorithm']:<12} {lat_str:<18} "
-                f"{success:<12.1%} {cost:<10}"
+                f"{r['algorithm']:<12} {lat_str:<14} {q:<12.2f} {comm:<12.2f} "
+                f"{penalty:<10.1f} {mem:<10.1%} {success:<10.1%} {cost:<8}"
             )
 
     return results
@@ -230,6 +246,11 @@ def save_results(results, output_dir):
             {
                 "algorithm": r["algorithm"],
                 "avg_latency": lat if lat == lat else None,  # NaN -> None
+                "avg_queuing": r.get("avg_queuing", 0),
+                "avg_processing": r.get("avg_processing", 0),
+                "avg_communication": r.get("avg_communication", 0),
+                "total_penalty": r.get("total_penalty", 0),
+                "mem_utilization": r.get("mem_utilization", 0),
                 "success_rate": r["success_rate"],
                 "deployment_cost": r["deployment_cost"],
                 "param": r.get("param"),
@@ -270,8 +291,10 @@ def main():
 示例:
   python run_experiment.py
   python run_experiment.py --algo ffd-m drs lego
-  python run_experiment.py --perturb arrival_rate 1,10,50,100
-  python run_experiment.py --algo ffd-m drs lego our --perturb arrival_rate 1,20,50 --seed 42
+  python run_experiment.py --perturb arrival_rate 100,200,400,600,800
+  python run_experiment.py --perturb chain_length 3,4,5,6,7,8,9,10
+  python run_experiment.py --perturb n_task_types 10,20,30,40,50,60,70,80
+  python run_experiment.py --algo ffd-m drs lego our --perturb arrival_rate 100,200,400,800 --seed 42
         """,
     )
 

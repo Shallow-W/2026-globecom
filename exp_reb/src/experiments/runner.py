@@ -79,36 +79,53 @@ class ExperimentRunner:
         # Queueing analysis
         analyzer = QueueingNetworkAnalyzer(topology, services)
 
-        # Calculate latency for each chain
+        # Calculate latency for each chain (record arrival_rate for weighting)
         chain_latencies = []
         for chain in chains:
             lat = analyzer.calc_chain_latency(chain, plan, version_map)
             chain_latencies.append({
                 "chain_id": chain.chain_id,
+                "arrival_rate": chain.arrival_rate,
                 **lat
             })
 
-        # Aggregate metrics (exclude unrealizable chains from latency average)
-        valid_latencies = [c["total"] for c in chain_latencies if not c.get("unrealizable") and c["total"] != float('inf')]
-        total_lat = sum(valid_latencies) if valid_latencies else 0
-        avg_lat = total_lat / len(valid_latencies) if valid_latencies else float('inf')
+        # ============================================================
+        # 与exp_2一致的到达率加权聚合
+        # ============================================================
+        total_arrival = sum(c["arrival_rate"] for c in chain_latencies)
 
-        # Resource utilization
-        util = analyzer.calc_resource_utilization(plan)
+        # 加权求和：每条链按 weight = rate / total_rate 加权
+        weighted_lat = 0.0
+        weighted_queuing = 0.0
+        weighted_comm = 0.0
+        weighted_penalty = 0.0
 
-        # Success rate (chains meeting latency constraint AND realizable)
+        for c, chain in zip(chain_latencies, chains):
+            weight = chain.arrival_rate / total_arrival
+            lat = c["total"]
+            if lat == float('inf'):
+                lat = 10000.0  # 与exp_2一致：inf给个大值但继续加权
+            weighted_lat += lat * weight
+            weighted_queuing += c["queuing"] * weight
+            weighted_comm += c["communication"] * weight
+            weighted_penalty += c.get("penalty", 0) * weight
+
+        avg_lat = weighted_lat
+        avg_queuing = weighted_queuing
+        avg_communication = weighted_comm
+        avg_processing = 0.0  # 已合并到 queuing
+
+        # Success rate（与之前一致：满足延迟约束的链比例）
         success = 0
-        for c in chain_latencies:
-            # Unrealizable chains (couldn't be deployed) don't count as success
+        for c, chain in zip(chain_latencies, chains):
             if c.get("unrealizable") or c["total"] == float('inf'):
                 continue
-            chain_constraint = next(
-                (ch.max_latency for ch in chains if ch.chain_id == c["chain_id"]),
-                float('inf')
-            )
-            if c["total"] <= chain_constraint:
+            if c["total"] <= chain.max_latency:
                 success += 1
         success_rate = success / len(chains) if chains else 0
+
+        # Resource utilization (global memory utilization, 与exp_2一致)
+        mem_util = analyzer.calc_mem_utilization(plan)
 
         # Deployment cost (number of nodes used)
         cost = len(set(n for (_, n) in plan.placement.keys()))
@@ -118,7 +135,11 @@ class ExperimentRunner:
             "deployment_plan": plan,
             "chain_latencies": chain_latencies,
             "avg_latency": avg_lat,
-            "resource_utilization": util,
+            "avg_queuing": avg_queuing,
+            "avg_processing": avg_processing,
+            "avg_communication": avg_communication,
+            "total_penalty": weighted_penalty,
+            "mem_utilization": mem_util,
             "success_rate": success_rate,
             "deployment_cost": cost
         }
@@ -199,15 +220,20 @@ class ExperimentRunner:
 
         return results
 
-    def _perturb_chains_arrival_rate(self, base_chains, arrival_rate: float):
-        """Create new chains with different arrival rate but same structure."""
-        from copy import deepcopy
+    def _perturb_chains_arrival_rate(self, base_chains, total_arrival_rate: float):
+        """Create new chains with different total arrival rate using Dirichlet distribution."""
+        import numpy as np
+        num_chains = len(base_chains)
+        raw_rates = np.random.dirichlet(np.ones(num_chains)) * total_arrival_rate
+        rates = np.maximum(1, np.round(raw_rates)).astype(int)
+        rates[0] += int(total_arrival_rate) - np.sum(rates)
+
         perturbed_chains = []
-        for chain in base_chains:
+        for chain, rate in zip(base_chains, rates):
             new_chain = ServiceChain(
                 chain_id=chain.chain_id,
                 services=chain.services.copy(),
-                arrival_rate=arrival_rate,
+                arrival_rate=float(rate),
                 max_latency=chain.max_latency,
                 task_type=chain.task_type
             )
@@ -215,19 +241,32 @@ class ExperimentRunner:
         return perturbed_chains
 
     def _perturb_chains_task_types(self, base_chains, n_types: int, config: Dict):
-        """Create new chains with different number of task types."""
-        task_types = config.get("task_types",
-            ["class_scene", "class_object", "room_layout", "jigsaw",
-             "segmentsemantic", "normal", "autoencoder"])
-        selected_types = task_types[:int(n_types)]
+        """
+        Create new chains with different number of task types.
+
+        Chains are regenerated: each chain samples microservices from a pool of
+        'n_types' distinct microservice IDs, keeping arrival_rate, max_latency,
+        and chain_id from base_chains.
+        """
+        import random
+
+        # 可用微服务池：s0, s1, ..., s{max-1}
+        available_service_ids = [f"s{i}" for i in range(n_types)]
 
         perturbed_chains = []
         for chain in base_chains:
-            import random
-            new_task_type = random.choice(selected_types)
+            length = len(chain.services)
+            # 采样服务（有放回，与exp_2一致）
+            selected = random.choices(available_service_ids, k=length)
+            # task_type 随机分配（与exp_2保持一致）
+            task_types = config.get("task_types",
+                ["class_scene", "class_object", "room_layout", "jigsaw",
+                 "segmentsemantic", "normal", "autoencoder"])
+            new_task_type = random.choice(task_types)
+
             new_chain = ServiceChain(
                 chain_id=chain.chain_id,
-                services=chain.services.copy(),
+                services=selected,
                 arrival_rate=chain.arrival_rate,
                 max_latency=chain.max_latency,
                 task_type=new_task_type
@@ -236,20 +275,18 @@ class ExperimentRunner:
         return perturbed_chains
 
     def _perturb_chains_length(self, base_chains, new_length: int, config: Dict, generator):
-        """Regenerate chains with different length."""
+        """Regenerate chains with different length (sampling with replacement, like exp_2)."""
         import random
 
-        service_ids = list(range(config.get("num_services", 10)))
+        service_ids = [f"s{i}" for i in range(config.get("num_services", 10))]
         perturbed_chains = []
 
         for chain in base_chains:
-            # Adjust chain length
-            length = min(new_length, len(service_ids))
-            # Randomly select services for the chain
-            new_services = random.sample(service_ids, length)
+            # 有放回采样（与exp_2的 random.choices 一致）
+            new_services = random.choices(service_ids, k=new_length)
             new_chain = ServiceChain(
                 chain_id=chain.chain_id,
-                services=[f"s{s}" for s in new_services],
+                services=new_services,
                 arrival_rate=chain.arrival_rate,
                 max_latency=chain.max_latency,
                 task_type=chain.task_type

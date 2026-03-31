@@ -1,0 +1,20 @@
+[7] M. Young, The Technical Writer’s Handbook. Mill Valley, CA: University
+Science, 1989.
+[8] D. P. Kingma and M. Welling, “Auto-encoding variational Bayes,” 2013,
+arXiv:1312.6114. [Online]. Available: https://arxiv.org/abs/1312.6114
+[9] S. Liu, “Wi-Fi Energy Detection Testbed (12MTC),” 2023, gitHub repository.
+[Online]. Available: https://github.com/liustone99/Wi-Fi-Energy-Detection-
+Testbed-12MTC
+[10] “Treatment episode data set: discharges (TEDS-D): concatenated, 2006 to
+2009.” U.S. Department of Health and Human Services, Substance Abuse and
+Mental Health Services Administration, Office of Applied Studies, August,
+2013, DOI:10.3886/ICPSR30122.v2
+[11] K. Eves and J. Valasek, “Adaptive control for singularly perturbed
+systems examples,” Code Ocean, Aug. 2023. [Online]. Available:
+https://codeocean.com/capsule/4989235/tree
+IEEE conference templates contain guidance text for
+composing and formatting conference papers. Please ensure
+that all template text is removed from your conference
+paper prior to submission to the conference. Failure to
+remove the template text from your paper may result in
+your paper not being published.

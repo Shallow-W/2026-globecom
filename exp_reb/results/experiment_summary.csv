@@ -1,0 +1,3 @@
+algorithm,avg_latency,avg_queuing,avg_communication,avg_qos,total_penalty,mem_utilization,success_rate,deployment_cost,fitness,param,value
+our,572.5845041412869,559.984504141287,12.600000000000001,0,0.0,0.41706049777777776,1.0,4,0,,
+ffd-m,10000.0,inf,inf,0,inf,0.1,0.0,3,0,,

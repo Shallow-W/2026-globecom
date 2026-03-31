@@ -19,6 +19,7 @@ class ModelVersion:
     accuracy: float             # 精度指标 (0-1)
     cpu_per_instance: float     # CPU需求
     gpu_per_instance: int       # GPU内存需求 (MB)
+    model_params: int = 0       # 参数量（用于内存占用计算，与exp_2一致）
 
     def calc_service_time(self) -> float:
         """平均服务时间 = 1000/μ (ms)"""
@@ -27,9 +28,9 @@ class ModelVersion:
 
 # 预定义版本配置
 MODEL_VERSION_CONFIGS = {
-    "Model-H": {"mu_range": [3, 7], "accuracy": 0.62, "cpu": 2, "gpu": 2048},
-    "Model-M": {"mu_range": [8, 12], "accuracy": 0.53, "cpu": 1, "gpu": 1024},
-    "Model-L": {"mu_range": [15, 25], "accuracy": 0.45, "cpu": 1, "gpu": 512},
+    "Model-H": {"mu_range": [3, 7], "accuracy": 0.62, "cpu": 2, "gpu": 2048, "params": 10_000_000},
+    "Model-M": {"mu_range": [8, 12], "accuracy": 0.53, "cpu": 1, "gpu": 1024, "params": 5_000_000},
+    "Model-L": {"mu_range": [15, 25], "accuracy": 0.45, "cpu": 1, "gpu": 512, "params": 1_000_000},
 }
 
 

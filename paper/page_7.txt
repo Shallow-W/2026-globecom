@@ -1,0 +1,68 @@
+H. Figures and Tables
+a) Positioning Figures and Tables:Place figures
+and tables at the top and bottom of columns. Avoid placing
+them in the middle of columns. Large figures and tables
+may span across both columns. Figure captions should be
+below the figures; table heads should appear above the
+tables. Insert figures and tables after they are cited in the
+text. Use the abbreviation “Fig. 1”, even at the beginning
+of a sentence.
+表I
+TABLETYPESTYLES
+Table Table Column Head
+Head Table column subhead Subhead Subhead
+copy More table copy a
+aSample of a Table footnote.
+图1. Example of a figure caption.
+Figure Labels: Use 8 point Times New Roman for
+Figure labels. Use words rather than symbols or abbrevia-
+tions when writing Figure axis labels to avoid confusing the
+reader. As an example, write the quantity “Magnetization”,
+or “Magnetization, M”, not just “M”. If including units in
+the label, present them within parentheses. Do not label
+axes only with units. In the example, write “Magnetization
+(A/m)” or “Magnetization{A[m(1)]}”, not just “A/m”. Do
+not label axes with a ratio of quantities and units. For
+example, write “Temperature (K)”, not “Temperature/K”.
+ACKNOWLEDGMENT
+The preferred spelling of the word “acknowledgment”
+in America is without an “e” after the “g”. Avoid the stilted
+expression “one of us (R. B. G.) thanks. . .”. Instead, try
+“R. B. G. thanks. . .”. Put sponsor acknowledgments in the
+unnumbered footnote on the first page.
+REFERENCES
+Please number citations consecutively within brackets
+[1]. The sentence punctuation follows the bracket [2]. Refer
+simply to the reference number, as in [3]—do not use
+“Ref. [3]” or “reference [3]” except at the beginning of
+a sentence: “Reference [3] was the first. . .”
+Number footnotes separately in superscripts. Place the
+actual footnote at the bottom of the column in which it was
+cited. Do not put footnotes in the abstract or reference list.
+Use letters for table footnotes.
+Unless there are six authors or more give all authors’
+names; do not use “et al.”. Papers that have not been
+published, even if they have been submitted for publication,
+should be cited as “unpublished” [4]. Papers that have been
+accepted for publication should be cited as “in press” [5].
+Capitalize only the first word in a paper title, except for
+proper nouns and element symbols.
+For papers published in translation journals, please
+give the English citation first, followed by the original
+foreign-language citation [6].
+参考文献
+[1] G. Eason, B. Noble, and I. N. Sneddon, “On certain integrals of Lipschitz-
+Hankel type involving products of Bessel functions,” Phil. Trans. Roy. Soc.
+London, vol. A247, pp. 529–551, April 1955.
+[2] J. Clerk Maxwell, A Treatise on Electricity and Magnetism, 3rd ed., vol. 2.
+Oxford: Clarendon, 1892, pp.68–73.
+[3] I. S. Jacobs and C. P. Bean, “Fine particles, thin films and exchange
+anisotropy,” in Magnetism, vol. III, G. T. Rado and H. Suhl, Eds. New York:
+Academic, 1963, pp. 271–350.
+[4] K. Elissa, “Title of paper if known,” unpublished.
+[5] R. Nicole, “Title of paper with only first word capitalized,” J. Name Stand.
+Abbrev., in press.
+[6] Y . Yorozu, M. Hirano, K. Oka, and Y . Tagawa, “Electron spectroscopy studies
+on magneto-optical media and plastic substrate interface,” IEEE Transl. J.
+Magn. Japan, vol. 2, pp. 740–741, August 1987 [Digests 9th Annual Conf.
+Magnetics Japan, p. 301, 1982].

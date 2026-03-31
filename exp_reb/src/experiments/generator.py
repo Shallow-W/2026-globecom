@@ -114,7 +114,8 @@ class DataGenerator:
                     mu=mu,
                     accuracy=cfg.get("accuracy", 0.5),
                     cpu_per_instance=cpu,
-                    gpu_per_instance=gpu
+                    gpu_per_instance=gpu,
+                    model_params=cfg.get("params", 0)
                 )
 
             services[service_id] = MicroService(
@@ -132,8 +133,8 @@ class DataGenerator:
 
         Args:
             config: Configuration dict with keys:
-                - num_chains: Number of service chains
-                - arrival_rate_range: [min, max] arrival rate λ
+                - num_chains: Number of service chains (default: 4)
+                - total_arrival_rate: Total arrival rate λ (sum across all chains)
                 - chain_length_range: [min, max] chain length
                 - max_latency: Maximum latency constraint in ms
                 - task_types: List of task types (default: Excel sheet names)
@@ -142,11 +143,9 @@ class DataGenerator:
         Returns:
             List[ServiceChain]: List of generated service chains
         """
-        num_chains = config.get("num_chains", 5)
-        rate_range = config.get("arrival_rate_range", [1, 50])
-        # Handle scalar perturbation values (convert to constant range)
-        if isinstance(rate_range, (int, float)):
-            rate_range = [rate_range, rate_range]
+        num_chains = config.get("num_chains", 4)
+        total_rate = config.get("total_arrival_rate", 200)
+        num_task_types = config.get("num_task_types", 10)  # 限制任务池大小
         length_range = config.get("chain_length_range", [2, 5])
         if isinstance(length_range, (int, float)):
             length_range = [length_range, length_range]
@@ -157,18 +156,26 @@ class DataGenerator:
             ["class_scene", "class_object", "room_layout", "jigsaw",
              "segmentsemantic", "normal", "autoencoder"])
 
+        # Dirichlet 分配到达率（与exp_2一致）
+        import numpy as np
+        raw_rates = np.random.dirichlet(np.ones(num_chains)) * total_rate
+        rates = np.maximum(1, np.round(raw_rates)).astype(int)
+        rates[0] += total_rate - np.sum(rates)  # 保证总和精确等于total_rate
+
         chains = []
-        service_ids = list(services.keys())
+        # 只使用前 num_task_types 个微服务（与exp_2的 current_tasks = available_tasks[:num_types] 一致）
+        all_service_ids = list(services.keys())
+        service_ids = all_service_ids[:num_task_types]
 
         for i in range(num_chains):
             # Random chain length
             length = self.rng.randint(length_range[0], min(length_range[1], len(service_ids)))
 
-            # Randomly select services without replacement to form chain
-            chain_services = self.rng.sample(service_ids, min(length, len(service_ids)))
+            # Randomly select services WITH replacement (与exp_2的 random.choices 一致)
+            chain_services = self.rng.choices(service_ids, k=length)
 
-            # Random arrival rate
-            rate = self.rng.uniform(rate_range[0], rate_range[1])
+            # Dirichlet 分配的到达率
+            rate = float(rates[i])
 
             # Random task type
             task_type = self.rng.choice(task_types)

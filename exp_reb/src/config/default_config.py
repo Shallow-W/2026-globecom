@@ -8,8 +8,8 @@ DEFAULT_CONFIG = {
     "gpu_equipped_nodes_ratio": 0.5,  # 配备GPU的节点比例
     "link_delay_range": [0.1, 5.0],  # ms
     # Service (with multi-version models)
-    "num_services": 10,
-    "num_gpu_services": 3,  # 需要GPU的服务数量
+    "num_services": 80,          # 80个微服务（支持n_task_types扰动到80）
+    "num_gpu_services": 3,       # 需要GPU的服务数量
     # 模型版本配置 (参考Excel数据)
     "model_versions": {
         "Model-H": {
@@ -32,8 +32,9 @@ DEFAULT_CONFIG = {
         },
     },
     # Service chain
-    "num_chains": 30,
-    "arrival_rate_range": [1, 50],  # 到达率 λ
+    "num_chains": 30,             # 30条链（与exp_2一致，提高success_rate粒度）
+    "total_arrival_rate": 200,    # 总到达率 λ（可扰动）
+    "num_task_types": 10,         # 任务类型数量（可扰动）
     "chain_length_range": [2, 5],
     "max_latency": 500.0,  # ms (SLA延迟约束)
     # Experiment
