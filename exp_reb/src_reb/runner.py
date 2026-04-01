@@ -30,7 +30,7 @@ from algorithms.deployment.baselines import (
 
 # 导入我们的GA
 from .ga import GeneticAlgorithm
-from .config import N_NODES, N_VERSIONS
+from .config import N_NODES, N_VERSIONS, NODE_FLOPS_CAPACITY
 from .data_model import ModelLibrary
 
 
@@ -63,20 +63,20 @@ class DataGenerator:
         # 拓扑
         topology = self._generate_topology(num_nodes)
 
-        # 服务
-        services = self._generate_services(num_types)
+        # 模型库（先生成，以便获取任务名称）
+        model_lib = self._get_model_library(config)
 
-        # 服务链
+        # 服务（使用模型库的任务名称，确保与模型库一致）
+        services = self._generate_services_from_library(model_lib, num_types)
+
+        # 服务链（使用实际的服务ID）
         chains = self._generate_chains(
             num_chains=num_chains,
-            num_types=num_types,
+            service_pool=list(services.keys())[:num_types],
             chain_length=chain_length,
             total_arrival_rate=total_arrival_rate,
             max_latency=config.get("max_latency", 1000.0)
         )
-
-        # 模型库
-        model_lib = self._get_model_library(config)
 
         return topology, services, chains, model_lib
 
@@ -124,12 +124,11 @@ class DataGenerator:
 
     def _generate_chains(self,
                         num_chains: int,
-                        num_types: int,
+                        service_pool: List[str],
                         chain_length: int,
                         total_arrival_rate: float,
                         max_latency: float = 1000.0) -> List[ServiceChain]:
         """生成服务链（与exp_2一致: Dirichlet到达率 + choices有放回采样）"""
-        service_pool = [f"s{i}" for i in range(num_types)]
         task_types = ["class_scene", "class_object", "room_layout", "jigsaw",
                       "segmentsemantic", "normal", "autoencoder"]
 
@@ -150,6 +149,69 @@ class DataGenerator:
                 task_type=self.rng.choice(task_types)
             ))
         return chains
+
+    def _generate_services_from_library(self, model_lib: ModelLibrary, num_types: int) -> Dict[str, MicroService]:
+        """
+        从模型库生成服务定义，确保服务ID与模型库任务名称一致
+
+        使用与baseline算法兼容的固定mu值：
+        - Model-H: mu=20000 req/s
+        - Model-M: mu=40000 req/s
+        - Model-L: mu=200000 req/s
+
+        但使用模型库的normalized_qos和model_params
+
+        Args:
+            model_lib: 模型库
+            num_types: 服务类型数量
+
+        Returns:
+            Dict[str, MicroService]: 服务字典，key为服务ID
+        """
+        version_names = ["Model-H", "Model-M", "Model-L"]
+        version_mus = [20000.0, 40000.0, 200000.0]  # req/s，与baseline兼容
+        version_params = [10_000_000, 5_000_000, 1_000_000]  # 参数量
+        version_accuracies = [0.62, 0.53, 0.45]
+
+        services = {}
+        # 使用模型库中的任务名称
+        task_names = model_lib.available_tasks[:num_types]
+
+        for task_name in task_names:
+            svc = MicroService(service_id=task_name)
+            svc.versions = {}
+
+            # 从模型库获取版本数据（用于qos和params）
+            lib_versions = model_lib.get_versions(task_name)
+
+            for v_idx, vname in enumerate(version_names):
+                if len(lib_versions) > v_idx:
+                    v_data = lib_versions[v_idx]
+                    # 使用模型库的normalized_qos和model_params，但用固定的mu值
+                    mv = ModelVersion(
+                        version_id=vname,
+                        mu=version_mus[v_idx],  # 固定mu，与baseline兼容
+                        accuracy=v_data.normalized_qos,  # 使用模型库的qos
+                        cpu_per_instance=1,
+                        gpu_per_instance=1024,
+                        model_params=v_data.model_params,  # 使用模型库的params
+                    )
+                else:
+                    # Fallback: 使用默认值
+                    mv = ModelVersion(
+                        version_id=vname,
+                        mu=version_mus[v_idx],
+                        accuracy=version_accuracies[v_idx],
+                        cpu_per_instance=1,
+                        gpu_per_instance=1024,
+                        model_params=version_params[v_idx],
+                    )
+                svc.versions[vname] = mv
+
+            svc.requires_gpu = any(v.gpu_per_instance > 0 for v in svc.versions.values())
+            services[task_name] = svc
+
+        return services
 
     def _get_model_library(self, config: Dict[str, Any]) -> ModelLibrary:
         """获取模型库"""
@@ -254,7 +316,6 @@ class ExperimentRunner:
         config = self.config
         num_chains = len(chains)
         total_arrival = sum(c.arrival_rate for c in chains)
-        chain_length = config.get("chain_length", 4)
 
         service_ids = list(services.keys())
 
@@ -278,10 +339,14 @@ class ExperimentRunner:
         # 每条链独立优化
         chain_results = []
         for chain in chains:
+            # 使用chain实际使用的服务列表
+            chain_service_list = chain.services
+            chain_length = len(chain_service_list)
+
             best = ga.run(
                 model_library=model_library,
                 service_ids=service_ids,
-                chain_length=chain_length,
+                chain_services=chain_service_list,
                 arrival_rate=chain.arrival_rate,
                 proxy_knowledge=proxy_knowledge
             )
@@ -293,6 +358,7 @@ class ExperimentRunner:
                 "comm_delay": best.comm_delay,
                 "total_delay": best.queuing_delay + best.comm_delay,
                 "penalty": best.penalty,
+                "qos": best.qos,
                 "success": (best.queuing_delay + best.comm_delay) <= chain.max_latency,
             })
 
@@ -300,6 +366,7 @@ class ExperimentRunner:
         avg_latency = sum(r["total_delay"] * r["weight"] for r in chain_results)
         avg_queuing = sum(r["queuing_delay"] * r["weight"] for r in chain_results)
         avg_comm = sum(r["comm_delay"] * r["weight"] for r in chain_results)
+        avg_qos = sum(r["qos"] * r["weight"] for r in chain_results)
         total_penalty = sum(r["penalty"] * r["weight"] for r in chain_results)
         success_rate = sum(1 for r in chain_results if r["success"]) / len(chain_results)
         avg_mem = sum(best.mem_util for _ in chain_results) / len(chain_results)
@@ -309,6 +376,7 @@ class ExperimentRunner:
             "avg_latency": avg_latency,
             "avg_queuing": avg_queuing,
             "avg_communication": avg_comm,
+            "avg_qos": avg_qos,
             "total_penalty": total_penalty,
             "mem_utilization": avg_mem,
             "success_rate": success_rate,
@@ -399,12 +467,13 @@ class ExperimentRunner:
         generator = DataGenerator(seed=base_config.get("seed", 42))
 
         fixed = EXPERIMENTS.get(param_name, {}).get("fixed", {})
+        actual_param = EXPERIMENTS.get(param_name, {}).get("param", param_name)
 
         for value in param_values:
             # 构建当前配置
             config = base_config.copy()
             config.update(fixed)
-            config[param_name] = int(value) if param_name == "num_types" or param_name == "chain_length" else float(value)
+            config[actual_param] = int(value) if actual_param in ("num_types", "chain_length") else float(value)
 
             # 生成新数据
             topo, servs, chns, lib = generator.generate_all(config)

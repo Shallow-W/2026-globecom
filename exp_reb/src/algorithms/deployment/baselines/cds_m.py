@@ -42,10 +42,16 @@ class CoLocatedDeploymentM(DeploymentAlgorithm):
         plan = DeploymentPlan()
         fixed_version = "Model-M"
 
-        # Model-M parameters
+        # Model-M parameters (from service definition)
         model_m_cpu = 1
         model_m_gpu = 1024
-        model_m_mu = 10
+
+        # Get actual Model-M mu from first service (all services should have same Model-M mu)
+        model_m_mu = 40000.0  # default fallback
+        for svc in services.values():
+            if hasattr(svc, 'versions') and fixed_version in svc.versions:
+                model_m_mu = svc.versions[fixed_version].mu
+                break
 
         # Track remaining resources on each node
         node_remaining: Dict[str, Dict[str, int]] = {}

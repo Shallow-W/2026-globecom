@@ -70,7 +70,7 @@ class GeneticAlgorithm:
     def initialize_population(self,
                               model_library,
                               service_ids: List[str],
-                              chain_length: int,
+                              chain_services: List[str],
                               arrival_rate: float,
                               proxy_knowledge: Dict = None) -> List[Individual]:
         """
@@ -79,7 +79,7 @@ class GeneticAlgorithm:
         Args:
             model_library: 模型库
             service_ids: 服务ID列表
-            chain_length: 链长度
+            chain_services: 链实际使用的服务列表
             arrival_rate: 到达率
             proxy_knowledge: 代理知识 {s_idx: best_v_idx}
 
@@ -90,14 +90,14 @@ class GeneticAlgorithm:
 
         # 贪心个体：每个服务选最佳版本，分布在不同节点
         greedy = self._create_greedy_individual(
-            model_library, service_ids, chain_length, arrival_rate, proxy_knowledge
+            model_library, service_ids, chain_services, arrival_rate, proxy_knowledge
         )
         population.append(greedy)
 
         # 更多贪心变种
         for _ in range(3):
             greedy_var = self._create_greedy_individual(
-                model_library, service_ids, chain_length, arrival_rate, proxy_knowledge, variance=True
+                model_library, service_ids, chain_services, arrival_rate, proxy_knowledge, variance=True
             )
             population.append(greedy_var)
 
@@ -111,14 +111,18 @@ class GeneticAlgorithm:
     def _create_greedy_individual(self,
                                   model_library,
                                   service_ids: List[str],
-                                  chain_length: int,
+                                  chain_services: List[str],
                                   arrival_rate: float,
                                   proxy_knowledge: Optional[Dict] = None,
                                   variance: bool = False) -> Individual:
         """创建贪心个体"""
         X = np.zeros((self.num_services, self.num_nodes, self.num_versions), dtype=np.int32)
 
-        for s_idx in range(min(chain_length, len(service_ids))):
+        # 跟踪每个节点的总参数量负载
+        node_param_loads = [0.0] * self.num_nodes
+
+        # 部署所有服务（不只是chain_length），因为链可能包含任何服务
+        for s_idx in range(len(service_ids)):
             service_id = service_ids[s_idx]
             versions = model_library.get_versions(service_id)
 
@@ -135,14 +139,17 @@ class GeneticAlgorithm:
             # 映射到GA的version维度（ clamp到0~num_versions-1）
             best_v = min(best_v, self.num_versions - 1)
 
-            # 选择最少负载的节点
-            node_loads = [X[s_idx, e, :].sum() for e in range(self.num_nodes)]
-            best_e = min(range(self.num_nodes), key=lambda e: node_loads[e])
+            # 选择参数量负载最少的节点
+            best_e = min(range(self.num_nodes), key=lambda e: node_param_loads[e])
 
             # 部署1个实例
             X[s_idx, best_e, best_v] = 1
 
-        return self._evaluate(X, model_library, service_ids, chain_length, arrival_rate)
+            # 更新节点参数量负载
+            if best_v < len(versions):
+                node_param_loads[best_e] += versions[best_v].model_params
+
+        return self._evaluate(X, model_library, service_ids, chain_services, arrival_rate)
 
     def _create_random_individual(self) -> Individual:
         """创建随机个体"""
@@ -161,17 +168,17 @@ class GeneticAlgorithm:
     def _evaluate(self, X: np.ndarray,
                   model_library,
                   service_ids: List[str],
-                  chain_length: int,
+                  chain_services: List[str],
                   arrival_rate: float) -> Individual:
         """评估一个个体的适应度"""
         p = self.router.compute(X)
 
         # QoS
-        qos = self.qos_calc.compute(X, p, model_library, service_ids, chain_length)
+        qos = self.qos_calc.compute(X, p, model_library, service_ids, len(chain_services))
 
         # 延迟
         delay_calc = DelayCalculator(model_library, arrival_rate)
-        delay_result = delay_calc.calc_chain_delay(X, p, service_ids, chain_length)
+        delay_result = delay_calc.calc_chain_delay(X, p, service_ids, chain_services)
 
         # 内存
         mem_util, overflow_penalty = self.mem_calc.compute(X, model_library, service_ids, self.num_nodes)
@@ -196,7 +203,7 @@ class GeneticAlgorithm:
         )
 
     def select(self, population: List[Individual], model_library,
-               service_ids: List[str], chain_length: int, arrival_rate: float) -> List[Individual]:
+               service_ids: List[str], chain_services: List[str], arrival_rate: float) -> List[Individual]:
         """
         锦标赛选择
         """
@@ -241,7 +248,7 @@ class GeneticAlgorithm:
                population: List[Individual],
                model_library,
                service_ids: List[str],
-               chain_length: int,
+               chain_services: List[str],
                arrival_rate: float,
                generation: int) -> Individual:
         """
@@ -282,11 +289,12 @@ class GeneticAlgorithm:
 
             X = trial
 
-        return self._evaluate(X, model_library, service_ids, chain_length, arrival_rate)
+        return self._evaluate(X, model_library, service_ids, chain_services, arrival_rate)
 
     def repair(self, individual: Individual,
                model_library,
-               service_ids: List[str]) -> Individual:
+               service_ids: List[str],
+               chain_services: List[str] = None) -> Individual:
         """
         修复算子（与exp_2一致）
 
@@ -295,6 +303,10 @@ class GeneticAlgorithm:
         """
         X = individual.X.copy()
         MAX_NODE_PARAMS = 150_000_000
+
+        # 如果没有提供chain_services，使用默认评估（后面会被重新评估）
+        if chain_services is None:
+            chain_services = service_ids[:self.num_services]
 
         # 1. 服务宕机修复
         for s_idx in range(min(len(service_ids), self.num_services)):
@@ -342,12 +354,12 @@ class GeneticAlgorithm:
                     X[s_idx, e_idx, v_idx] -= removed
                     excess -= removed * params
 
-        return self._evaluate(X, model_library, service_ids, self.num_services, individual.queuing_delay)
+        return self._evaluate(X, model_library, service_ids, chain_services, individual.queuing_delay)
 
     def run(self,
             model_library,
             service_ids: List[str],
-            chain_length: int,
+            chain_services: List[str],
             arrival_rate: float,
             proxy_knowledge: Dict = None) -> Individual:
         """
@@ -356,16 +368,18 @@ class GeneticAlgorithm:
         Args:
             model_library: 模型库
             service_ids: 服务ID列表
-            chain_length: 链长度
+            chain_services: 链实际使用的服务列表
             arrival_rate: 到达率
             proxy_knowledge: 代理知识
 
         Returns:
             最优个体
         """
+        chain_length = len(chain_services)
+
         # 初始化
         self.population = self.initialize_population(
-            model_library, service_ids, chain_length, arrival_rate, proxy_knowledge
+            model_library, service_ids, chain_services, arrival_rate, proxy_knowledge
         )
 
         # 评估初始种群
@@ -374,7 +388,7 @@ class GeneticAlgorithm:
             p = self.router.compute(X)
             qos = self.qos_calc.compute(X, p, model_library, service_ids, chain_length)
             delay_calc = DelayCalculator(model_library, arrival_rate)
-            delay_result = delay_calc.calc_chain_delay(X, p, service_ids, chain_length)
+            delay_result = delay_calc.calc_chain_delay(X, p, service_ids, chain_services)
             mem_util, overflow_penalty = self.mem_calc.compute(X, model_library, service_ids, self.num_nodes)
             fitness = self.fitness_agg.aggregate(
                 qos, delay_result["queuing"], delay_result["communication"],
@@ -393,7 +407,7 @@ class GeneticAlgorithm:
 
         for gen in range(self.generations):
             # 锦标赛选择
-            selected = self.select(self.population, model_library, service_ids, chain_length, arrival_rate)
+            selected = self.select(self.population, model_library, service_ids, chain_services, arrival_rate)
 
             # 交叉
             offsprings = []
@@ -404,12 +418,12 @@ class GeneticAlgorithm:
             # 变异
             for i in range(len(offsprings)):
                 offsprings[i] = self.mutate(
-                    offsprings[i], selected, model_library, service_ids, chain_length, arrival_rate, gen
+                    offsprings[i], selected, model_library, service_ids, chain_services, arrival_rate, gen
                 )
 
             # 修复
             for i in range(len(offsprings)):
-                offsprings[i] = self.repair(offsprings[i], model_library, service_ids)
+                offsprings[i] = self.repair(offsprings[i], model_library, service_ids, chain_services)
 
             # 合并
             self.population.extend(offsprings)
@@ -421,7 +435,7 @@ class GeneticAlgorithm:
                     p = self.router.compute(X)
                     qos = self.qos_calc.compute(X, p, model_library, service_ids, chain_length)
                     delay_calc = DelayCalculator(model_library, arrival_rate)
-                    delay_result = delay_calc.calc_chain_delay(X, p, service_ids, chain_length)
+                    delay_result = delay_calc.calc_chain_delay(X, p, service_ids, chain_services)
                     mem_util, overflow_penalty = self.mem_calc.compute(X, model_library, service_ids, self.num_nodes)
                     fitness = self.fitness_agg.aggregate(
                         qos, delay_result["queuing"], delay_result["communication"],

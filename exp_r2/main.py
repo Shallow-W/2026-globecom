@@ -8,6 +8,17 @@ from typing import List, Set
 
 import pandas as pd
 
+
+
+
+
+"""
+
+ar: python .\main.py --mode single --perturb arrival_rate --values 200,300,400,500,600,700,800 --replicates 10 --replicate-targets arrival_rate --arrival-chain-mode fixed --arrival-base-ntask 7 --arrival-base-chainlen 5 
+ntask: python .\main.py --mode single --perturb n_task_types --values 3,4,5,6,7,8,9,10 --replicates 10 --ntask-mode unique_chain_exact --ntask-base-rate 400 --num-chains 10
+chainlen: python .\main.py --mode single --perturb chain_length --values 3,4,5,6,7,8 --replicates 5 --chain-base-rate 350 --num-chains 10
+
+"""
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 from src.framework.constants import (
@@ -127,6 +138,12 @@ def run_perturbation_with_replicates(
     seed: int,
     fixed_arrival_chains: bool,
     replicates: int,
+    base_rate: int,
+    ntask_mode: str,
+    ntask_pool_size: int,
+    num_chains: int,
+    base_num_types: int,
+    base_chain_length: int,
 ):
     rows = []
     for rep in range(replicates):
@@ -137,8 +154,14 @@ def run_perturbation_with_replicates(
             param_name=param_name,
             param_values=param_values,
             algorithms=algorithms,
+            base_num_types=base_num_types,
+            base_length=base_chain_length,
+            base_rate=base_rate,
             seed=rep_seed,
             fixed_arrival_chains=fixed_arrival_chains,
+            ntask_mode=ntask_mode,
+            ntask_pool_size=ntask_pool_size,
+            num_chains=num_chains,
         )
         for row in rep_rows:
             row["Replicate"] = rep
@@ -180,6 +203,48 @@ def main() -> None:
         help="Comma-separated values when mode=single",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--chain-base-rate",
+        type=int,
+        default=300,
+        help="Base arrival rate used when perturbing chain_length",
+    )
+    parser.add_argument(
+        "--arrival-base-ntask",
+        type=int,
+        default=10,
+        help="Base n_task_types used when perturbing arrival_rate",
+    )
+    parser.add_argument(
+        "--arrival-base-chainlen",
+        type=int,
+        default=4,
+        help="Base chain_length used when perturbing arrival_rate",
+    )
+    parser.add_argument(
+        "--ntask-base-rate",
+        type=int,
+        default=300,
+        help="Base arrival rate used when perturbing n_task_types",
+    )
+    parser.add_argument(
+        "--ntask-mode",
+        choices=["pool_size", "unique_in_chains", "unique_chain_exact"],
+        default="unique_in_chains",
+        help="Interpret n_task_types as pool size, unique task count in chains, or exact unique-chain mode (length=n_task_types)",
+    )
+    parser.add_argument(
+        "--ntask-pool-size",
+        type=int,
+        default=80,
+        help="Fixed candidate task pool size when --ntask-mode=unique_in_chains",
+    )
+    parser.add_argument(
+        "--num-chains",
+        type=int,
+        default=10,
+        help="Number of generated user-chain templates per experiment",
+    )
     parser.add_argument("--replicates", type=int, default=1, help="Number of random-seed repeats per perturbation")
     parser.add_argument(
         "--replicate-targets",
@@ -225,6 +290,20 @@ def main() -> None:
 
     if args.replicates < 1:
         raise ValueError("--replicates must be >= 1")
+    if args.chain_base_rate < 1 or args.ntask_base_rate < 1:
+        raise ValueError("--chain-base-rate and --ntask-base-rate must be >= 1")
+    if args.arrival_base_ntask < 1 or args.arrival_base_chainlen < 1:
+        raise ValueError("--arrival-base-ntask and --arrival-base-chainlen must be >= 1")
+    if args.ntask_pool_size < 1:
+        raise ValueError("--ntask-pool-size must be >= 1")
+    if args.num_chains < 1:
+        raise ValueError("--num-chains must be >= 1")
+
+    base_rate_by_param = {
+        "arrival_rate": 200,
+        "chain_length": args.chain_base_rate,
+        "n_task_types": args.ntask_base_rate,
+    }
 
     if args.mode == "single":
         values = parse_int_list(args.values)
@@ -242,6 +321,12 @@ def main() -> None:
             seed=args.seed,
             fixed_arrival_chains=fixed_arrival_chains,
             replicates=replicate_count,
+            base_rate=base_rate_by_param[args.perturb],
+            ntask_mode=args.ntask_mode,
+            ntask_pool_size=args.ntask_pool_size,
+            num_chains=args.num_chains,
+            base_num_types=args.arrival_base_ntask,
+            base_chain_length=args.arrival_base_chainlen,
         )
         all_rows.extend(rows)
 
@@ -273,6 +358,12 @@ def main() -> None:
                 seed=args.seed,
                 fixed_arrival_chains=fixed_arrival_chains,
                 replicates=replicate_count,
+                base_rate=base_rate_by_param[param],
+                ntask_mode=args.ntask_mode,
+                ntask_pool_size=args.ntask_pool_size,
+                num_chains=args.num_chains,
+                base_num_types=args.arrival_base_ntask,
+                base_chain_length=args.arrival_base_chainlen,
             )
             all_rows.extend(rows)
 

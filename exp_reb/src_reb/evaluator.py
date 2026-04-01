@@ -168,6 +168,10 @@ class DelayCalculator:
         total_delay = 0.0
         total_penalty = 0.0
 
+        # 固定mu值（与旧框架services定义一致）: Model-H=20000, Model-M=40000, Model-L=200000
+        # 注意：这些是req/s，不是per-ms
+        version_mus = [20000.0, 40000.0, 200000.0]
+
         # 遍历所有(node, version)计算加权延迟
         for e_idx in range(X.shape[1]):
             for v_idx in range(X.shape[2]):
@@ -179,9 +183,9 @@ class DelayCalculator:
                 # chain_lambda is per-second; convert to per-ms: divide by 1000
                 rate_per_inst = (self.chain_lambda / 1000.0) * prob / cnt  # 每个实例的到达率 (per ms)
 
-                # mu: service rate per ms = flops / (node_flops_capacity / 1000)
-                # = 1000 * flops / node_flops_capacity
-                v_mu = 1000.0 * versions[v_idx].flops / NODE_FLOPS_CAPACITY
+                # 使用固定mu值（req/s），转为per-ms用于计算
+                mu = version_mus[v_idx] if v_idx < len(version_mus) else version_mus[-1]
+                v_mu = mu / 1000.0  # 转为per-ms
 
                 if rate_per_inst >= v_mu:
                     overload = rate_per_inst - v_mu
@@ -195,15 +199,15 @@ class DelayCalculator:
         return total_delay, total_penalty
 
     def calc_chain_delay(self, X: np.ndarray, p: np.ndarray,
-                         service_ids: List[str], chain_length: int) -> Dict[str, float]:
+                         service_ids: List[str], chain_services: List[str]) -> Dict[str, float]:
         """
         计算整条服务链的延迟
 
         Args:
             X: 染色体矩阵
             p: 路由概率矩阵
-            service_ids: 服务ID列表
-            chain_length: 链中服务数量
+            service_ids: 服务ID列表 (完整列表)
+            chain_services: 链实际使用的服务列表
 
         Returns:
             {
@@ -216,10 +220,9 @@ class DelayCalculator:
         total_queuing = 0.0
         total_penalty = 0.0
 
-        # 取链的前chain_length个服务
-        chain_service_ids = service_ids[:chain_length]
-
-        for s_idx in range(len(chain_service_ids)):
+        # 计算排队延迟：遍历链中每个服务，找到其在service_ids中的索引
+        for task_name in chain_services:
+            s_idx = service_ids.index(task_name)  # 找到正确的服务索引
             delay, penalty = self.calc_service_delay(s_idx, X, p, service_ids)
             if delay == float('inf'):
                 return {
@@ -232,26 +235,24 @@ class DelayCalculator:
             total_penalty += penalty
 
         # 通信延迟：链上相邻服务跨节点才有
-        # 简化：每步跨节点概率 × COMM_DELAY
+        # 按照静态实验的逻辑：计算相邻服务在不同节点上的概率
         comm_delay = 0.0
-        for i in range(len(chain_service_ids) - 1):
-            # 估算跨节点概率 = 1 - 同节点概率
-            # 简化处理：假设所有服务部署分散，有一定跨节点概率
-            s_idx = i
-            total_inst_curr = X[s_idx].sum()
-            if total_inst_curr == 0:
-                continue
+        for i in range(len(chain_services) - 1):
+            # 获取相邻两个服务的索引
+            s1_name = chain_services[i]
+            s2_name = chain_services[i + 1]
+            s1_idx = service_ids.index(s1_name)
+            s2_idx = service_ids.index(s2_name)
 
-            # 同节点最大概率
-            max_same_node_prob = 0.0
-            for e_idx in range(X.shape[1]):
-                same_node_inst = sum(X[s_idx, e_idx, v] for v in range(X.shape[2]))
-                if same_node_inst > 0:
-                    prob_same = same_node_inst / total_inst_curr
-                    max_same_node_prob = max(max_same_node_prob, prob_same)
+            # 计算每个服务在各个节点上的边缘概率
+            p_node_t1 = np.sum(p[s1_idx, :, :], axis=1)  # shape: (num_nodes,)
+            p_node_t2 = np.sum(p[s2_idx, :, :], axis=1)  # shape: (num_nodes,)
 
-            cross_node_prob = 1.0 - max_same_node_prob
-            comm_delay += cross_node_prob * COMM_DELAY_CROSS_NODE * 1000.0  # 转为ms
+            # 跨节点通信概率 = sum over all (e1 != e2) of p_t1[e1] * p_t2[e2]
+            for e1 in range(X.shape[1]):
+                for e2 in range(X.shape[1]):
+                    if e1 != e2:
+                        comm_delay += p_node_t1[e1] * p_node_t2[e2] * COMM_DELAY_CROSS_NODE * 1000.0  # 转为ms
 
         return {
             "queuing": total_queuing,

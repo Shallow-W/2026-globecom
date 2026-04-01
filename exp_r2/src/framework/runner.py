@@ -72,6 +72,9 @@ class ExperimentRunner:
         base_rate: int = 200,
         seed: int = 42,
         fixed_arrival_chains: bool = True,
+        ntask_mode: str = "unique_in_chains",
+        ntask_pool_size: int = 80,
+        num_chains: int = 10,
     ) -> List[Dict[str, Any]]:
         """Run one perturbation axis while keeping the others fixed."""
 
@@ -84,7 +87,7 @@ class ExperimentRunner:
                 num_types=base_num_types,
                 length=base_length,
                 total_rate=base_rate,
-                num_chains=4,
+                num_chains=num_chains,
                 rng_seed=seed,
             )
 
@@ -92,6 +95,9 @@ class ExperimentRunner:
             num_types = base_num_types
             length = base_length
             total_rate = base_rate
+            task_pool_size = None
+            target_unique_tasks = None
+            sample_without_replacement_per_chain = False
 
             if param_name == "arrival_rate":
                 total_rate = int(value)
@@ -99,6 +105,13 @@ class ExperimentRunner:
                 length = int(value)
             elif param_name == "n_task_types":
                 num_types = int(value)
+                if ntask_mode == "unique_in_chains":
+                    task_pool_size = max(1, int(ntask_pool_size))
+                    target_unique_tasks = int(value)
+                elif ntask_mode == "unique_chain_exact":
+                    task_pool_size = int(value)
+                    length = int(value)
+                    sample_without_replacement_per_chain = True
             else:
                 raise ValueError(f"Unsupported perturbation parameter: {param_name}")
 
@@ -115,7 +128,11 @@ class ExperimentRunner:
                     num_types=num_types,
                     length=length,
                     total_rate=total_rate,
+                    num_chains=num_chains,
                     rng_seed=seed + idx,
+                    task_pool_size=task_pool_size,
+                    target_unique_tasks=target_unique_tasks,
+                    sample_without_replacement_per_chain=sample_without_replacement_per_chain,
                 )
 
             comparison = self.run_comparison(ctx, algorithms=algorithms, seed=seed + idx)

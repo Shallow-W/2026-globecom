@@ -1,0 +1,30 @@
+[
+  {
+    "algorithm": "our",
+    "avg_latency": null,
+    "avg_queuing": Infinity,
+    "avg_communication": 0.0,
+    "avg_qos": 0,
+    "total_penalty": Infinity,
+    "mem_utilization": 0.0,
+    "success_rate": 0.0,
+    "deployment_cost": 4,
+    "fitness": 0,
+    "param": "arrival_rate",
+    "value": 100.0
+  },
+  {
+    "algorithm": "ffd-m",
+    "avg_latency": 0.22149155366141582,
+    "avg_queuing": 0.20009155366141582,
+    "avg_communication": 0.0214,
+    "avg_qos": 0,
+    "total_penalty": 0.0,
+    "mem_utilization": 0.1111111111111111,
+    "success_rate": 1.0,
+    "deployment_cost": 3,
+    "fitness": 0,
+    "param": "arrival_rate",
+    "value": 100.0
+  }
+]
