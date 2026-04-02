@@ -54,7 +54,11 @@ def evaluate_matrix(individual: np.ndarray, ctx: ExperimentContext) -> Dict[str,
 
     for uc in ctx.user_chains:
         chain = uc["chain"]
-        weight = float(uc["rate"]) / ctx.total_arrival_rate if ctx.total_arrival_rate > 0 else 0.0
+        weight = (
+            float(uc["rate"]) / ctx.total_arrival_rate
+            if ctx.total_arrival_rate > 0
+            else 0.0
+        )
 
         chain_qos = 0.0
         chain_comp = 0.0
@@ -81,7 +85,9 @@ def evaluate_matrix(individual: np.ndarray, ctx: ExperimentContext) -> Dict[str,
                         mu = ctx.node_flops_capacity / ctx.tasks_data[task][v]["flops"]
                         rate_per_inst = lam / float(inst)
                         if rate_per_inst >= mu:
-                            penalty_delay += 1000.0 * (float(rate_per_inst) - float(mu) + 1.0)
+                            penalty_delay += 1000.0 * (
+                                float(rate_per_inst) - float(mu) + 1.0
+                            )
                             delay_node = 1.0
                         else:
                             delay_node = 1.0 / (mu - rate_per_inst)

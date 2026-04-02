@@ -115,8 +115,14 @@ class ExperimentRunner:
             else:
                 raise ValueError(f"Unsupported perturbation parameter: {param_name}")
 
-            if param_name == "arrival_rate" and fixed_arrival_chains and base_user_chains is not None:
-                user_chains = scale_user_chain_rates(base_user_chains, total_rate=total_rate)
+            if (
+                param_name == "arrival_rate"
+                and fixed_arrival_chains
+                and base_user_chains is not None
+            ):
+                user_chains = scale_user_chain_rates(
+                    base_user_chains, total_rate=total_rate
+                )
                 ctx = build_context_from_user_chains(
                     tasks_data=tasks_data,
                     user_chains=user_chains,
@@ -135,7 +141,9 @@ class ExperimentRunner:
                     sample_without_replacement_per_chain=sample_without_replacement_per_chain,
                 )
 
-            comparison = self.run_comparison(ctx, algorithms=algorithms, seed=seed + idx)
+            comparison = self.run_comparison(
+                ctx, algorithms=algorithms, seed=seed + idx
+            )
             for row in comparison:
                 row["Experiment"] = param_name
                 row["Variable_Value"] = value

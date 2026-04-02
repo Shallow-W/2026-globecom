@@ -9,9 +9,6 @@ from typing import List, Set
 import pandas as pd
 
 
-
-
-
 """
 
 ar: python .\main.py --mode single --perturb arrival_rate --values 200,300,400,500,600,700,800 --replicates 10 --replicate-targets arrival_rate --arrival-chain-mode fixed --arrival-base-ntask 7 --arrival-base-chainlen 5 
@@ -98,7 +95,11 @@ def print_round_details(df: pd.DataFrame) -> None:
                 .sort_values("Algorithm")
                 .reset_index(drop=True)
             )
-            run_counts = value_df.groupby("Algorithm", as_index=False).size().rename(columns={"size": "Runs"})
+            run_counts = (
+                value_df.groupby("Algorithm", as_index=False)
+                .size()
+                .rename(columns={"size": "Runs"})
+            )
             round_df = round_df.merge(run_counts, on="Algorithm", how="left")
             print(f"\n{exp} = {_display_value(value)}")
             print(round_df.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
@@ -106,7 +107,9 @@ def print_round_details(df: pd.DataFrame) -> None:
 
 def summarize_by_value(df: pd.DataFrame) -> pd.DataFrame:
     summary = (
-        df.groupby(["Experiment", "Variable_Value", "Algorithm"], as_index=False)[METRIC_COLUMNS]
+        df.groupby(["Experiment", "Variable_Value", "Algorithm"], as_index=False)[
+            METRIC_COLUMNS
+        ]
         .agg(["mean", "std", "count"])
         .reset_index()
     )
@@ -125,7 +128,9 @@ def summarize_by_value(df: pd.DataFrame) -> pd.DataFrame:
     std_cols = [c for c in summary.columns if c.endswith("_std")]
     if std_cols:
         summary[std_cols] = summary[std_cols].fillna(0.0)
-    return summary.sort_values(["Experiment", "Variable_Value", "Algorithm"]).reset_index(drop=True)
+    return summary.sort_values(
+        ["Experiment", "Variable_Value", "Algorithm"]
+    ).reset_index(drop=True)
 
 
 def run_perturbation_with_replicates(
@@ -171,11 +176,15 @@ def run_perturbation_with_replicates(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Deployment and routing experiment framework")
+    parser = argparse.ArgumentParser(
+        description="Deployment and routing experiment framework"
+    )
     parser.add_argument(
         "--excel",
         type=str,
-        default=os.path.join(CURRENT_DIR, "data", "evaluation_tables_20260325_163931.xlsx"),
+        default=os.path.join(
+            CURRENT_DIR, "data", "evaluation_tables_20260325_163931.xlsx"
+        ),
         help="Path to Excel model library",
     )
     parser.add_argument(
@@ -245,7 +254,12 @@ def main() -> None:
         default=10,
         help="Number of generated user-chain templates per experiment",
     )
-    parser.add_argument("--replicates", type=int, default=1, help="Number of random-seed repeats per perturbation")
+    parser.add_argument(
+        "--replicates",
+        type=int,
+        default=1,
+        help="Number of random-seed repeats per perturbation",
+    )
     parser.add_argument(
         "--replicate-targets",
         type=str,
@@ -258,16 +272,26 @@ def main() -> None:
         default="fixed",
         help="When perturb=arrival_rate, keep chain templates fixed or regenerate per value",
     )
-    parser.add_argument("--our-generations", type=int, default=40, help="Evolution generations for Our")
-    parser.add_argument("--our-pop-size", type=int, default=36, help="Population size for Our")
+    parser.add_argument(
+        "--our-generations", type=int, default=40, help="Evolution generations for Our"
+    )
+    parser.add_argument(
+        "--our-pop-size", type=int, default=36, help="Population size for Our"
+    )
     parser.add_argument(
         "--max-required-tasks",
         type=int,
         default=80,
         help="Expand task pool to this size by copy augmentation",
     )
-    parser.add_argument("--output-dir", type=str, default=os.path.join(CURRENT_DIR, "results"))
-    parser.add_argument("--quick", action="store_true", help="Use smaller perturbation grids for smoke checks")
+    parser.add_argument(
+        "--output-dir", type=str, default=os.path.join(CURRENT_DIR, "results")
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Use smaller perturbation grids for smoke checks",
+    )
 
     args = parser.parse_args()
 
@@ -293,7 +317,9 @@ def main() -> None:
     if args.chain_base_rate < 1 or args.ntask_base_rate < 1:
         raise ValueError("--chain-base-rate and --ntask-base-rate must be >= 1")
     if args.arrival_base_ntask < 1 or args.arrival_base_chainlen < 1:
-        raise ValueError("--arrival-base-ntask and --arrival-base-chainlen must be >= 1")
+        raise ValueError(
+            "--arrival-base-ntask and --arrival-base-chainlen must be >= 1"
+        )
     if args.ntask_pool_size < 1:
         raise ValueError("--ntask-pool-size must be >= 1")
     if args.num_chains < 1:
@@ -333,8 +359,12 @@ def main() -> None:
         out_path = os.path.join(args.output_dir, f"perturb_{args.perturb}.csv")
         perturb_df = save_rows(rows, out_path)
         print(f"Saved: {out_path}")
-        summary_value_path = os.path.join(args.output_dir, f"perturb_{args.perturb}_summary_mean_std.csv")
-        summarize_by_value(perturb_df).to_csv(summary_value_path, index=False, encoding="utf-8-sig")
+        summary_value_path = os.path.join(
+            args.output_dir, f"perturb_{args.perturb}_summary_mean_std.csv"
+        )
+        summarize_by_value(perturb_df).to_csv(
+            summary_value_path, index=False, encoding="utf-8-sig"
+        )
         print(f"Saved: {summary_value_path}")
 
     else:
@@ -370,8 +400,12 @@ def main() -> None:
             out_path = os.path.join(args.output_dir, f"perturb_{param}.csv")
             perturb_df = save_rows(rows, out_path)
             print(f"Saved: {out_path}")
-            summary_value_path = os.path.join(args.output_dir, f"perturb_{param}_summary_mean_std.csv")
-            summarize_by_value(perturb_df).to_csv(summary_value_path, index=False, encoding="utf-8-sig")
+            summary_value_path = os.path.join(
+                args.output_dir, f"perturb_{param}_summary_mean_std.csv"
+            )
+            summarize_by_value(perturb_df).to_csv(
+                summary_value_path, index=False, encoding="utf-8-sig"
+            )
             print(f"Saved: {summary_value_path}")
 
     all_df = save_rows(all_rows, os.path.join(args.output_dir, "all_results.csv"))
@@ -386,8 +420,12 @@ def main() -> None:
 
     print(f"Saved: {os.path.join(args.output_dir, 'all_results.csv')}")
     print(f"Saved: {summary_path}")
-    overall_by_value_path = os.path.join(args.output_dir, "summary_by_value_algorithm_mean_std.csv")
-    summarize_by_value(all_df).to_csv(overall_by_value_path, index=False, encoding="utf-8-sig")
+    overall_by_value_path = os.path.join(
+        args.output_dir, "summary_by_value_algorithm_mean_std.csv"
+    )
+    summarize_by_value(all_df).to_csv(
+        overall_by_value_path, index=False, encoding="utf-8-sig"
+    )
     print(f"Saved: {overall_by_value_path}")
     print_round_details(all_df)
     print_brief_summary(all_df)

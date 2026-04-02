@@ -73,7 +73,9 @@ def repair_individual(
         for e in range(ctx.n_nodes):
             for v in range(ctx.n_versions):
                 if v < len(ctx.tasks_data[task]) and x[s_idx, e, v] > 0:
-                    node_usage[e] += x[s_idx, e, v] * ctx.tasks_data[task][v]["model_params"]
+                    node_usage[e] += (
+                        x[s_idx, e, v] * ctx.tasks_data[task][v]["model_params"]
+                    )
 
     # Ensure each task has at least one instance.
     for s_idx, task in enumerate(ctx.current_tasks):
@@ -111,7 +113,7 @@ def repair_individual(
             if t_v != min_v and max_p > min_p:
                 x[t_s, e, t_v] -= 1
                 x[t_s, e, min_v] += 1
-                node_usage[e] -= (max_p - min_p)
+                node_usage[e] -= max_p - min_p
             else:
                 x[t_s, e, t_v] -= 1
                 node_usage[e] -= max_p
@@ -131,7 +133,9 @@ class BaselineAlgorithm(DeploymentAlgorithm):
         x = np.zeros((ctx.n_tasks, ctx.n_nodes, ctx.n_versions), dtype=int)
         node_usage = np.zeros(ctx.n_nodes, dtype=float)
 
-        tasks_sorted = sorted(ctx.current_tasks, key=lambda t: ctx.lambda_s[t], reverse=True)
+        tasks_sorted = sorted(
+            ctx.current_tasks, key=lambda t: ctx.lambda_s[t], reverse=True
+        )
 
         # Precompute chain-locality map for CDS/LEGO.
         task_chain_neighbors: Dict[str, set] = {t: set() for t in ctx.current_tasks}
@@ -297,7 +301,9 @@ class OurAlgorithm(DeploymentAlgorithm):
             for s_idx, task in enumerate(ctx.current_tasks):
                 if np.sum(x[s_idx]) == 0:
                     node = int(rng.integers(0, ctx.n_nodes))
-                    v = int(rng.integers(0, min(ctx.n_versions, len(ctx.tasks_data[task]))))
+                    v = int(
+                        rng.integers(0, min(ctx.n_versions, len(ctx.tasks_data[task])))
+                    )
                     x[s_idx, node, v] = 1
             pop.append(repair_individual(flatten_matrix(x), ctx, proxy))
 
@@ -316,14 +322,20 @@ class OurAlgorithm(DeploymentAlgorithm):
             new_pop: List[np.ndarray] = []
             for _ in range(self.pop_size):
                 i1, i2 = rng.choice(self.pop_size, size=2, replace=False)
-                winner = pop[int(i1)] if evaluations[int(i1)]["fitness"] > evaluations[int(i2)]["fitness"] else pop[int(i2)]
+                winner = (
+                    pop[int(i1)]
+                    if evaluations[int(i1)]["fitness"] > evaluations[int(i2)]["fitness"]
+                    else pop[int(i2)]
+                )
                 new_pop.append(winner.copy())
 
             # Two-point crossover.
             for i in range(0, self.pop_size - 1, 2):
                 if rng.random() < 0.8:
                     pt1 = int(rng.integers(1, max(2, ctx.genes_len // 2)))
-                    pt2 = int(rng.integers(max(pt1 + 1, ctx.genes_len // 2), ctx.genes_len))
+                    pt2 = int(
+                        rng.integers(max(pt1 + 1, ctx.genes_len // 2), ctx.genes_len)
+                    )
                     seg1 = new_pop[i][pt1:pt2].copy()
                     seg2 = new_pop[i + 1][pt1:pt2].copy()
                     new_pop[i][pt1:pt2] = seg2
@@ -362,7 +374,9 @@ class OurAlgorithm(DeploymentAlgorithm):
         return best_individual
 
 
-def create_algorithm(name: str, our_generations: int = 40, our_pop_size: int = 36) -> DeploymentAlgorithm:
+def create_algorithm(
+    name: str, our_generations: int = 40, our_pop_size: int = 36
+) -> DeploymentAlgorithm:
     """Factory for all supported algorithms."""
 
     name = name.lower()

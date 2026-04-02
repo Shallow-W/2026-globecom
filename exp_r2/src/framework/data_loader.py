@@ -60,7 +60,9 @@ def load_and_prepare_data(
 
     original_tasks = list(tasks_data.keys())
     if not original_tasks:
-        raise RuntimeError("No tasks loaded from Excel and no fallback tasks available.")
+        raise RuntimeError(
+            "No tasks loaded from Excel and no fallback tasks available."
+        )
 
     tasks_list = copy.deepcopy(original_tasks)
     idx = 0

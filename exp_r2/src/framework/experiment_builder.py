@@ -42,7 +42,9 @@ def generate_user_chains(
 
     if sample_without_replacement_per_chain:
         if length > len(current_tasks):
-            raise ValueError("length cannot exceed task pool size when sampling without replacement")
+            raise ValueError(
+                "length cannot exceed task pool size when sampling without replacement"
+            )
         for i in range(num_chains):
             indices = rng.choice(len(current_tasks), size=length, replace=False)
             chain = [current_tasks[int(idx)] for idx in indices]
@@ -52,12 +54,16 @@ def generate_user_chains(
         unique_count = int(target_unique_tasks)
         unique_count = max(1, min(unique_count, len(current_tasks), total_positions))
 
-        selected_indices = rng.choice(len(current_tasks), size=unique_count, replace=False)
+        selected_indices = rng.choice(
+            len(current_tasks), size=unique_count, replace=False
+        )
         selected_tasks = [current_tasks[int(idx)] for idx in selected_indices]
 
         chain_tasks_flat = selected_tasks.copy()
         if total_positions > unique_count:
-            extra_indices = rng.integers(0, unique_count, size=total_positions - unique_count)
+            extra_indices = rng.integers(
+                0, unique_count, size=total_positions - unique_count
+            )
             chain_tasks_flat.extend(selected_tasks[int(idx)] for idx in extra_indices)
         rng.shuffle(chain_tasks_flat)
 
@@ -74,7 +80,9 @@ def generate_user_chains(
     return chains, current_tasks
 
 
-def scale_user_chain_rates(user_chains: List[Dict[str, Any]], total_rate: int) -> List[Dict[str, Any]]:
+def scale_user_chain_rates(
+    user_chains: List[Dict[str, Any]], total_rate: int
+) -> List[Dict[str, Any]]:
     """Keep chain structure and rescale per-chain rates to a new total rate."""
 
     if total_rate <= 0:
