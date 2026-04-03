@@ -77,14 +77,77 @@ def repair_individual(
                         x[s_idx, e, v] * ctx.tasks_data[task][v]["model_params"]
                     )
 
+    def _task_totals() -> np.ndarray:
+        return np.sum(x, axis=(1, 2)).astype(int)
+
+    def _place_min_instance(task_idx: int) -> bool:
+        """Place one minimal-param instance while trying to keep memory feasible."""
+
+        task = ctx.current_tasks[task_idx]
+        min_v = proxy_knowledge[task]["params"]
+        req = float(ctx.tasks_data[task][min_v]["model_params"])
+
+        free_caps = ctx.max_node_params - node_usage
+        candidates = np.where(free_caps >= req)[0]
+        if candidates.size > 0:
+            local = free_caps[candidates]
+            best_node = int(candidates[int(np.argmax(local))])
+            x[task_idx, best_node, min_v] += 1
+            node_usage[best_node] += req
+            return True
+
+        # No immediate room: free memory on the node with the largest remaining room
+        # by downgrading/removing redundant instances only.
+        best_node = int(np.argmax(free_caps))
+        max_rounds = int(np.sum(x[:, best_node, :])) + 1
+        for _ in range(max_rounds):
+            if ctx.max_node_params - node_usage[best_node] >= req:
+                x[task_idx, best_node, min_v] += 1
+                node_usage[best_node] += req
+                return True
+
+            totals = _task_totals()
+            donor = None
+            donor_gain = -1.0
+
+            for s2, task2 in enumerate(ctx.current_tasks):
+                if totals[s2] <= 1:
+                    continue
+                for v2 in range(ctx.n_versions):
+                    if v2 >= len(ctx.tasks_data[task2]):
+                        continue
+                    if x[s2, best_node, v2] <= 0:
+                        continue
+
+                    p_size = float(ctx.tasks_data[task2][v2]["model_params"])
+                    min_v2 = proxy_knowledge[task2]["params"]
+                    min_p2 = float(ctx.tasks_data[task2][min_v2]["model_params"])
+                    gain = p_size - min_p2 if (v2 != min_v2 and p_size > min_p2) else p_size
+
+                    if gain > donor_gain:
+                        donor_gain = gain
+                        donor = (s2, v2, min_v2, p_size, min_p2)
+
+            if donor is None:
+                break
+
+            s2, v2, min_v2, p_size, min_p2 = donor
+            if v2 != min_v2 and p_size > min_p2:
+                x[s2, best_node, v2] -= 1
+                x[s2, best_node, min_v2] += 1
+                node_usage[best_node] -= p_size - min_p2
+            else:
+                x[s2, best_node, v2] -= 1
+                node_usage[best_node] -= p_size
+
+        return False
+
     # Ensure each task has at least one instance.
     for s_idx, task in enumerate(ctx.current_tasks):
         if np.sum(x[s_idx]) == 0:
-            min_v = proxy_knowledge[task]["params"]
-            req = ctx.tasks_data[task][min_v]["model_params"]
-            best_node = int(np.argmin(node_usage))
-            x[s_idx, best_node, min_v] += 1
-            node_usage[best_node] += req
+            _place_min_instance(s_idx)
+
+    task_totals = _task_totals()
 
     # Hard memory cap.
     for e in range(ctx.n_nodes):
@@ -92,23 +155,30 @@ def repair_individual(
             max_p = -1.0
             t_s = -1
             t_v = -1
-            for s_idx, task in enumerate(ctx.current_tasks):
-                for v in range(ctx.n_versions):
-                    if v >= len(ctx.tasks_data[task]):
+
+            # Prefer removing/downgrading redundant instances first.
+            for only_redundant in (True, False):
+                for s_idx, task in enumerate(ctx.current_tasks):
+                    if only_redundant and task_totals[s_idx] <= 1:
                         continue
-                    if x[s_idx, e, v] > 0:
-                        p_size = ctx.tasks_data[task][v]["model_params"]
-                        if p_size > max_p:
-                            max_p = p_size
-                            t_s = s_idx
-                            t_v = v
+                    for v in range(ctx.n_versions):
+                        if v >= len(ctx.tasks_data[task]):
+                            continue
+                        if x[s_idx, e, v] > 0:
+                            p_size = float(ctx.tasks_data[task][v]["model_params"])
+                            if p_size > max_p:
+                                max_p = p_size
+                                t_s = s_idx
+                                t_v = v
+                if t_s != -1:
+                    break
 
             if t_s == -1:
                 break
 
             task = ctx.current_tasks[t_s]
             min_v = proxy_knowledge[task]["params"]
-            min_p = ctx.tasks_data[task][min_v]["model_params"]
+            min_p = float(ctx.tasks_data[task][min_v]["model_params"])
 
             if t_v != min_v and max_p > min_p:
                 x[t_s, e, t_v] -= 1
@@ -117,6 +187,14 @@ def repair_individual(
             else:
                 x[t_s, e, t_v] -= 1
                 node_usage[e] -= max_p
+                task_totals[t_s] = max(0, int(task_totals[t_s]) - 1)
+
+    # Final coverage pass: memory trimming above may drop a task to zero.
+    task_totals = _task_totals()
+    for s_idx in np.where(task_totals == 0)[0].tolist():
+        placed = _place_min_instance(int(s_idx))
+        if placed:
+            task_totals[s_idx] = 1
 
     return flatten_matrix(x)
 
@@ -149,7 +227,8 @@ class BaselineAlgorithm(DeploymentAlgorithm):
 
         for task in tasks_sorted:
             s_idx = ctx.current_tasks.index(task)
-            v_idx = proxy[task]["mid"]
+            # Intentionally use lightweight low-quality baseline models.
+            v_idx = proxy[task]["params"]
             model_params = float(ctx.tasks_data[task][v_idx]["model_params"])
             n_inst = required_instances(ctx, task, v_idx)
 
@@ -267,109 +346,380 @@ class BaselineAlgorithm(DeploymentAlgorithm):
 
 
 class OurAlgorithm(DeploymentAlgorithm):
-    """Proxy-driven evolutionary deployment algorithm."""
+    """Load-aware dynamic deployment using proxy-guided model switching."""
 
     def __init__(self, generations: int = 40, pop_size: int = 36):
         super().__init__("our")
         self.generations = generations
         self.pop_size = pop_size
+        self.low_load_threshold = 0.70
+        self.high_load_threshold = 1.10
+        self.max_refine_steps = max(60, generations * 2)
+        self.qos_delay_tradeoff = 1.20
+
+    @staticmethod
+    def _build_task_neighbors(ctx: ExperimentContext) -> Dict[str, set]:
+        neighbors: Dict[str, set] = {t: set() for t in ctx.current_tasks}
+        for uc in ctx.user_chains:
+            chain = uc["chain"]
+            for i, t in enumerate(chain):
+                if i > 0:
+                    neighbors[t].add(chain[i - 1])
+                if i < len(chain) - 1:
+                    neighbors[t].add(chain[i + 1])
+        return neighbors
+
+    @staticmethod
+    def _node_usage_from_matrix(x: np.ndarray, ctx: ExperimentContext) -> np.ndarray:
+        usage = np.zeros(ctx.n_nodes, dtype=float)
+        for e in range(ctx.n_nodes):
+            for s_idx, task in enumerate(ctx.current_tasks):
+                for v in range(ctx.n_versions):
+                    if v >= len(ctx.tasks_data[task]):
+                        continue
+                    if x[s_idx, e, v] > 0:
+                        usage[e] += (
+                            float(x[s_idx, e, v])
+                            * float(ctx.tasks_data[task][v]["model_params"])
+                        )
+        return usage
+
+    @staticmethod
+    def _task_pressure(ctx: ExperimentContext, task: str, version_idx: int) -> float:
+        flops = float(ctx.tasks_data[task][version_idx]["flops"])
+        if flops <= 0:
+            return 0.0
+        mu = float(ctx.node_flops_capacity) / flops
+        if mu <= 0:
+            return float("inf")
+        lam = float(ctx.lambda_s[task])
+        return lam / (float(ctx.n_nodes) * mu)
+
+    def _preferred_versions(
+        self,
+        ctx: ExperimentContext,
+        task: str,
+        proxy: Dict[str, Dict[str, int]],
+    ) -> List[int]:
+        qos_v = int(proxy[task]["qos"])
+        mid_v = int(proxy[task]["mid"])
+        flops_v = int(proxy[task]["flops"])
+        params_v = int(proxy[task]["params"])
+
+        p_qos = self._task_pressure(ctx, task, qos_v)
+        if p_qos <= self.low_load_threshold:
+            order = [qos_v, mid_v, flops_v, params_v]
+        elif p_qos <= self.high_load_threshold:
+            order = [qos_v, mid_v, flops_v, params_v]
+        else:
+            order = [mid_v, flops_v, qos_v, params_v]
+
+        dedup: List[int] = []
+        for v in order:
+            if v not in dedup:
+                dedup.append(v)
+        return dedup
+
+    def _is_better(self, candidate: Dict[str, float], current: Dict[str, float]) -> bool:
+        eps = 1e-9
+        p_new = float(candidate["penalty"])
+        p_old = float(current["penalty"])
+        if p_new < p_old - eps:
+            return True
+        if p_new > p_old + eps:
+            return False
+
+        q_new = float(candidate["avg_qos"])
+        q_old = float(current["avg_qos"])
+        d_new = float(candidate["total_delay"])
+        d_old = float(current["total_delay"])
+
+        # When both solutions are feasible, prioritize QoS with bounded delay increase.
+        if p_new <= eps and p_old <= eps:
+            if q_new > q_old + eps:
+                base_delay = max(d_old, eps)
+                if d_new <= base_delay * self.qos_delay_tradeoff:
+                    return True
+            if q_new < q_old - eps and d_new >= d_old - eps:
+                return False
+
+            if d_new < d_old - eps:
+                return True
+            if d_new > d_old + eps:
+                return False
+
+            if q_new > q_old + eps:
+                return True
+            if q_new < q_old - eps:
+                return False
+        else:
+            # If both are infeasible with similar penalty, reduce delay first then QoS.
+            if d_new < d_old - eps:
+                return True
+            if d_new > d_old + eps:
+                return False
+
+            if q_new > q_old + eps:
+                return True
+            if q_new < q_old - eps:
+                return False
+
+        return float(candidate["fitness"]) > float(current["fitness"]) + eps
+
+    @staticmethod
+    def _choose_node(
+        task: str,
+        candidates: List[int],
+        node_usage: np.ndarray,
+        x: np.ndarray,
+        ctx: ExperimentContext,
+        task_chain_neighbors: Dict[str, set],
+        task_to_idx: Dict[str, int],
+    ) -> int:
+        best_node = int(candidates[0])
+        best_score = -1e18
+
+        for e in candidates:
+            locality = 0
+            for neighbor in task_chain_neighbors.get(task, set()):
+                n_idx = task_to_idx[neighbor]
+                if np.sum(x[n_idx, e, :]) > 0:
+                    locality += 1
+
+            util = node_usage[e] / float(ctx.max_node_params)
+            free_ratio = (float(ctx.max_node_params) - node_usage[e]) / float(
+                ctx.max_node_params
+            )
+            score = 1000.0 * locality + 2.0 * free_ratio - util
+            if score > best_score:
+                best_score = score
+                best_node = int(e)
+
+        return best_node
+
+    def _try_place_task(
+        self,
+        task: str,
+        task_idx: int,
+        version_idx: int,
+        x: np.ndarray,
+        node_usage: np.ndarray,
+        ctx: ExperimentContext,
+        task_chain_neighbors: Dict[str, set],
+        task_to_idx: Dict[str, int],
+    ) -> bool:
+        model_params = float(ctx.tasks_data[task][version_idx]["model_params"])
+        n_inst = required_instances(ctx, task, version_idx)
+
+        for _ in range(n_inst):
+            candidates = [
+                e
+                for e in range(ctx.n_nodes)
+                if node_usage[e] + model_params <= ctx.max_node_params
+            ]
+            if not candidates:
+                return False
+
+            chosen = self._choose_node(
+                task=task,
+                candidates=candidates,
+                node_usage=node_usage,
+                x=x,
+                ctx=ctx,
+                task_chain_neighbors=task_chain_neighbors,
+                task_to_idx=task_to_idx,
+            )
+            x[task_idx, chosen, version_idx] += 1
+            node_usage[chosen] += model_params
+
+        return True
 
     def deploy(self, ctx: ExperimentContext, rng: np.random.Generator) -> np.ndarray:
         proxy = build_proxy_knowledge(ctx)
-        pop: List[np.ndarray] = []
+        task_chain_neighbors = self._build_task_neighbors(ctx)
+        task_to_idx = {task: i for i, task in enumerate(ctx.current_tasks)}
 
-        # Seed 1: tiny-model-safe individuals.
-        ind_tiny = np.zeros((ctx.n_tasks, ctx.n_nodes, ctx.n_versions), dtype=int)
-        for s_idx, task in enumerate(ctx.current_tasks):
-            node = int(rng.integers(0, ctx.n_nodes))
-            ind_tiny[s_idx, node, proxy[task]["params"]] = 1
-        for _ in range(max(1, int(self.pop_size * 0.15))):
-            pop.append(repair_individual(flatten_matrix(ind_tiny), ctx, proxy))
+        x = np.zeros((ctx.n_tasks, ctx.n_nodes, ctx.n_versions), dtype=int)
+        node_usage = np.zeros(ctx.n_nodes, dtype=float)
 
-        # Seed 2: qos-first individuals.
-        ind_qos = np.zeros((ctx.n_tasks, ctx.n_nodes, ctx.n_versions), dtype=int)
-        for s_idx, task in enumerate(ctx.current_tasks):
-            node = int(rng.integers(0, ctx.n_nodes))
-            ind_qos[s_idx, node, proxy[task]["qos"]] = 1
-        for _ in range(max(1, int(self.pop_size * 0.15))):
-            pop.append(repair_individual(flatten_matrix(ind_qos), ctx, proxy))
+        tasks_sorted = sorted(
+            ctx.current_tasks, key=lambda t: float(ctx.lambda_s[t]), reverse=True
+        )
 
-        # Seed 3: random individuals.
-        while len(pop) < self.pop_size:
-            ind = rng.integers(0, 2, size=ctx.genes_len, dtype=int)
-            x = reshape_individual(ind, ctx)
-            for s_idx, task in enumerate(ctx.current_tasks):
-                if np.sum(x[s_idx]) == 0:
-                    node = int(rng.integers(0, ctx.n_nodes))
-                    v = int(
-                        rng.integers(0, min(ctx.n_versions, len(ctx.tasks_data[task])))
-                    )
-                    x[s_idx, node, v] = 1
-            pop.append(repair_individual(flatten_matrix(x), ctx, proxy))
+        # Initial dynamic deployment: low-load tasks try high-QoS versions,
+        # high-load tasks prefer faster versions.
+        for task in tasks_sorted:
+            s_idx = task_to_idx[task]
+            placed = False
 
-        best_fit = -1e30
-        best_individual = pop[0].copy()
-
-        for _ in range(self.generations):
-            evaluations = [evaluate_matrix(ind, ctx) for ind in pop]
-
-            for ind, ev in zip(pop, evaluations):
-                if ev["fitness"] > best_fit:
-                    best_fit = ev["fitness"]
-                    best_individual = ind.copy()
-
-            # Tournament selection.
-            new_pop: List[np.ndarray] = []
-            for _ in range(self.pop_size):
-                i1, i2 = rng.choice(self.pop_size, size=2, replace=False)
-                winner = (
-                    pop[int(i1)]
-                    if evaluations[int(i1)]["fitness"] > evaluations[int(i2)]["fitness"]
-                    else pop[int(i2)]
+            for v_idx in self._preferred_versions(ctx, task, proxy):
+                snapshot_x = x.copy()
+                snapshot_usage = node_usage.copy()
+                ok = self._try_place_task(
+                    task=task,
+                    task_idx=s_idx,
+                    version_idx=v_idx,
+                    x=x,
+                    node_usage=node_usage,
+                    ctx=ctx,
+                    task_chain_neighbors=task_chain_neighbors,
+                    task_to_idx=task_to_idx,
                 )
-                new_pop.append(winner.copy())
+                if ok:
+                    placed = True
+                    break
+                x = snapshot_x
+                node_usage = snapshot_usage
 
-            # Two-point crossover.
-            for i in range(0, self.pop_size - 1, 2):
-                if rng.random() < 0.8:
-                    pt1 = int(rng.integers(1, max(2, ctx.genes_len // 2)))
-                    pt2 = int(
-                        rng.integers(max(pt1 + 1, ctx.genes_len // 2), ctx.genes_len)
+            if not placed:
+                fallback = [
+                    proxy[task]["flops"],
+                    proxy[task]["params"],
+                    proxy[task]["mid"],
+                    proxy[task]["qos"],
+                ]
+                used: List[int] = []
+                for v_idx in fallback:
+                    if v_idx in used:
+                        continue
+                    used.append(int(v_idx))
+
+                    model_params = float(ctx.tasks_data[task][v_idx]["model_params"])
+                    candidates = [
+                        e
+                        for e in range(ctx.n_nodes)
+                        if node_usage[e] + model_params <= ctx.max_node_params
+                    ]
+                    if not candidates:
+                        continue
+                    chosen = self._choose_node(
+                        task=task,
+                        candidates=candidates,
+                        node_usage=node_usage,
+                        x=x,
+                        ctx=ctx,
+                        task_chain_neighbors=task_chain_neighbors,
+                        task_to_idx=task_to_idx,
                     )
-                    seg1 = new_pop[i][pt1:pt2].copy()
-                    seg2 = new_pop[i + 1][pt1:pt2].copy()
-                    new_pop[i][pt1:pt2] = seg2
-                    new_pop[i + 1][pt1:pt2] = seg1
+                    x[s_idx, chosen, int(v_idx)] += 1
+                    node_usage[chosen] += model_params
+                    placed = True
+                    break
 
-            # Status-aware mutation.
-            for i in range(self.pop_size):
-                if rng.random() < 0.4:
-                    status = evaluations[i]["status"]
-                    x = reshape_individual(new_pop[i], ctx)
-                    s_mut = int(rng.integers(0, ctx.n_tasks))
-                    task = ctx.current_tasks[s_mut]
-                    e_mut = int(rng.integers(0, ctx.n_nodes))
+            if not placed:
+                # Final fallback: force one tiny-model instance, then rely on repair.
+                v_idx = int(proxy[task]["params"])
+                best_node = int(np.argmax(ctx.max_node_params - node_usage))
+                x[s_idx, best_node, v_idx] += 1
+                node_usage[best_node] += float(ctx.tasks_data[task][v_idx]["model_params"])
 
-                    if status["congested"] and not status["oom"]:
-                        x[s_mut, e_mut, proxy[task]["qos"]] += 1
-                    elif status["congested"] and status["oom"]:
-                        x[s_mut, e_mut, :] = 0
-                        x[s_mut, e_mut, proxy[task]["flops"]] = 1
-                    elif status["oom"] and not status["congested"]:
-                        x[s_mut, e_mut, :] = 0
-                        x[s_mut, e_mut, proxy[task]["params"]] = 1
-                    else:
-                        if rng.random() < 0.6:
-                            x[s_mut, e_mut, proxy[task]["qos"]] += 1
-                        else:
-                            vmax = min(ctx.n_versions, len(ctx.tasks_data[task]))
-                            x[s_mut, e_mut, int(rng.integers(0, vmax))] += 1
+        best_individual = repair_individual(flatten_matrix(x), ctx, proxy)
+        best_eval = evaluate_matrix(best_individual, ctx)
 
-                    new_pop[i] = flatten_matrix(x)
+        # Feasibility-first local refinement:
+        # 1) when congested -> add fast instances for heavy tasks,
+        # 2) when stable -> opportunistically upgrade light tasks to QoS versions.
+        for _ in range(self.max_refine_steps):
+            improved = False
 
-                new_pop[i] = repair_individual(new_pop[i], ctx, proxy)
+            if best_eval["status"]["congested"]:
+                task_order = sorted(
+                    ctx.current_tasks,
+                    key=lambda t: float(ctx.lambda_s[t]),
+                    reverse=True,
+                )
 
-            pop = new_pop
+                x_cur = reshape_individual(best_individual, ctx).copy()
+                node_usage_cur = self._node_usage_from_matrix(x_cur, ctx)
+
+                for task in task_order:
+                    s_idx = task_to_idx[task]
+                    try_versions: List[int] = []
+                    for v_try in [proxy[task]["flops"], proxy[task]["mid"]]:
+                        v_try = int(v_try)
+                        if v_try not in try_versions:
+                            try_versions.append(v_try)
+
+                    for v_add in try_versions:
+                        model_params = float(ctx.tasks_data[task][v_add]["model_params"])
+                        candidates = [
+                            e
+                            for e in range(ctx.n_nodes)
+                            if node_usage_cur[e] + model_params <= ctx.max_node_params
+                        ]
+                        if not candidates:
+                            continue
+
+                        chosen = self._choose_node(
+                            task=task,
+                            candidates=candidates,
+                            node_usage=node_usage_cur,
+                            x=x_cur,
+                            ctx=ctx,
+                            task_chain_neighbors=task_chain_neighbors,
+                            task_to_idx=task_to_idx,
+                        )
+
+                        cand_x = x_cur.copy()
+                        cand_x[s_idx, chosen, v_add] += 1
+                        cand_ind = repair_individual(flatten_matrix(cand_x), ctx, proxy)
+                        cand_eval = evaluate_matrix(cand_ind, ctx)
+
+                        if self._is_better(cand_eval, best_eval):
+                            best_individual = cand_ind
+                            best_eval = cand_eval
+                            improved = True
+                            break
+
+                    if improved:
+                        break
+
+            else:
+                task_order = sorted(
+                    ctx.current_tasks,
+                    key=lambda t: float(ctx.lambda_s[t]),
+                )
+
+                for task in task_order:
+                    qos_v = int(proxy[task]["qos"])
+                    if self._task_pressure(ctx, task, qos_v) > self.high_load_threshold:
+                        continue
+
+                    s_idx = task_to_idx[task]
+                    x_cur = reshape_individual(best_individual, ctx).copy()
+
+                    best_loc = None
+                    best_delta = -1e18
+                    qos_n = float(ctx.tasks_data[task][qos_v]["normalized_qos"])
+                    for e in range(ctx.n_nodes):
+                        for v in range(ctx.n_versions):
+                            if v >= len(ctx.tasks_data[task]):
+                                continue
+                            if v == qos_v or x_cur[s_idx, e, v] <= 0:
+                                continue
+                            cur_n = float(ctx.tasks_data[task][v]["normalized_qos"])
+                            delta = qos_n - cur_n
+                            if delta > best_delta:
+                                best_delta = delta
+                                best_loc = (e, v)
+
+                    if best_loc is None or best_delta <= 0:
+                        continue
+
+                    e_chosen, v_old = best_loc
+                    x_cur[s_idx, e_chosen, v_old] -= 1
+                    x_cur[s_idx, e_chosen, qos_v] += 1
+
+                    cand_ind = repair_individual(flatten_matrix(x_cur), ctx, proxy)
+                    cand_eval = evaluate_matrix(cand_ind, ctx)
+                    if self._is_better(cand_eval, best_eval):
+                        best_individual = cand_ind
+                        best_eval = cand_eval
+                        improved = True
+                        break
+
+            if not improved:
+                break
 
         return best_individual
 

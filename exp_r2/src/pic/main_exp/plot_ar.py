@@ -12,7 +12,7 @@ NOISE_CONFIG = {
         # "GREEDY",
         # "LEGO",
         # "RLS",
-        # "Ours",
+        # "OURS",
     ],  # baseline算法
     "direction": "up",  # 波动方向: 'up', 'down', 'random'
     "noise_level": 0.0,  # 波动幅度 10%
@@ -138,10 +138,10 @@ colors = {
     "CDS": "#1f77b4",
     "DRS": "#ff7f0e",
     "FFD": "#2ca02c",
-    "GREEDY": "#d62728",
+    "GREEDY": "#e377c2",
     "LEGO": "#9467bd",
-    "Ours": "#e377c2",
     "RLS": "#7f7f7f",
+    "OURS": "#d62728",
 }
 
 markers = {
@@ -150,8 +150,8 @@ markers = {
     "FFD": "^",
     "GREEDY": "D",
     "LEGO": "p",
-    "Ours": "*",
     "RLS": "v",
+    "OURS": "*",
 }
 
 LABELS = {
@@ -160,18 +160,33 @@ LABELS = {
     "chainlen": ("(c) Length of Requests", ""),
 }
 
+ALGORITHM_ORDER = ["CDS", "DRS", "FFD", "GREEDY", "LEGO", "RLS", "OURS"]
+
+DISPLAY_LABELS = {
+    "CDS": "CDS",
+    "DRS": "DRS",
+    "FFD": "FFD",
+    "GREEDY": "GREEDY",
+    "LEGO": "LEGO",
+    "RLS": "RLS",
+    "OURS": "OURS",
+}
+
 for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
     df = dfs[exp_name]
+    df["Algorithm_Norm"] = df["Algorithm"].astype(str).str.strip().str.upper()
     ax = axes[idx]
     xlabel, title = LABELS[exp_name]
 
-    for algo in df["Algorithm"].unique():
-        algo_data = df[df["Algorithm"] == algo].sort_values("Variable_Value")
+    for algo in ALGORITHM_ORDER:
+        algo_data = df[df["Algorithm_Norm"] == algo].sort_values("Variable_Value")
+        if algo_data.empty:
+            continue
         ax.plot(
             algo_data["Variable_Value"],
             algo_data["Total_Delay_D_mean"],
             marker=markers.get(algo, "o"),
-            label=algo,
+            label=DISPLAY_LABELS.get(algo, algo),
             color=colors.get(algo, None),
             linewidth=PLOT_CONFIG["linewidth"],
             linestyle="--",
@@ -195,11 +210,14 @@ for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
         fontweight="bold",
         fontname="Times New Roman",
     )
-    ax.legend(
+    legend = ax.legend(
         loc="upper left",
         fontsize=PLOT_CONFIG["legend_fontsize"],
         prop={"family": "Times New Roman", "size": PLOT_CONFIG["legend_fontsize"]},
     )
+    for text in legend.get_texts():
+        if text.get_text() == "OURS":
+            text.set_fontweight("bold")
     ax.grid(
         True, color=PLOT_CONFIG["grid_color"], linewidth=PLOT_CONFIG["grid_linewidth"]
     )
@@ -220,4 +238,4 @@ plt.savefig(
     bbox_inches="tight",
 )
 
-print("图表已保存至: d:/Item/lab/2026globcom/exp_r2/src/pic/all_perturbations.png")
+print("图表已保存至: d:/Item/lab/2026globcom/exp_r2/src/pic")

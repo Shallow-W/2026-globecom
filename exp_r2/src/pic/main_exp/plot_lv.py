@@ -12,7 +12,7 @@ NOISE_CONFIG = {
         # "GREEDY",
         "LEGO",
         "RLS",
-        # "Ours",
+        # "OURS",
     ],  # baseline算法
     "direction": "down",  # 波动方向: 'up', 'down', 'random'
     "noise_level": 0.000,  # 波动幅度 10%
@@ -144,7 +144,7 @@ colors = {
     "DRS": "#A5A3C3",  # muted blue
     "LEGO": "#FFE6B7",  # soft lavender
     "GREEDY": "#F5EFBA",  # neutral gray
-    "Ours": "#FA7F6F",  # soft pink
+    "OURS": "#FA7F6F",  # soft pink
 }
 
 markers = {
@@ -153,8 +153,8 @@ markers = {
     "FFD": "^",
     "GREEDY": "D",
     "LEGO": "p",
-    "Ours": "*",
     "RLS": "v",
+    "OURS": "*",
 }
 
 LABELS = {
@@ -162,6 +162,20 @@ LABELS = {
     "ntask": ("(b) Number of Request Types", ""),
     "chainlen": ("(c) Length of Requests", ""),
 }
+
+ALGORITHM_ORDER = ["CDS", "DRS", "FFD", "GREEDY", "LEGO", "RLS", "OURS"]
+
+DISPLAY_LABELS = {
+    "CDS": "CDS",
+    "DRS": "DRS",
+    "FFD": "FFD",
+    "GREEDY": "GREEDY",
+    "LEGO": "LEGO",
+    "RLS": "RLS",
+    "OURS": "OURS",
+}
+
+EXCLUDED_ALGORITHMS = {"CDS", "GREEDY"}
 
 # 每个实验的横坐标取值范围（只绘制这些点）
 X_VALUE_FILTER = {
@@ -218,7 +232,8 @@ X_VALUE_FILTER = {
 
 # ============ 柱状图绘图 ============
 for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
-    df = dfs[exp_name]
+    df = dfs[exp_name].copy()
+    df["Algorithm_Norm"] = df["Algorithm"].astype(str).str.strip().str.upper()
     ax = axes[idx]
     xlabel, title = LABELS[exp_name]
 
@@ -226,7 +241,12 @@ for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
     if allowed_values is not None:
         df = df[df["Variable_Value"].isin(allowed_values)].copy()
 
-    algorithms = [a for a in df["Algorithm"].unique() if a not in ["CDS", "GREEDY"]]
+    available_algorithms = set(df["Algorithm_Norm"].unique())
+    algorithms = [
+        a
+        for a in ALGORITHM_ORDER
+        if a in available_algorithms and a not in EXCLUDED_ALGORITHMS
+    ]
     if allowed_values is not None:
         existing_values = set(df["Variable_Value"].tolist())
         var_values = [v for v in allowed_values if v in existing_values]
@@ -234,6 +254,8 @@ for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
         var_values = sorted(df["Variable_Value"].unique())
     n_vars = len(var_values)
     n_algos = len(algorithms)
+    if n_vars == 0 or n_algos == 0:
+        continue
 
     # 计算每组柱状图的位置，组间留空隙
     base_positions = np.arange(n_vars) * PLOT_CONFIG["bar_group_gap"]
@@ -244,14 +266,19 @@ for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
 
     all_values = []
     for i, algo in enumerate(algorithms):
-        algo_data = df[df["Algorithm"] == algo].sort_values("Variable_Value")
-        values = algo_data["Mem_Utilization_mean"].values
-        all_values.extend(values)
+        algo_data = (
+            df[df["Algorithm_Norm"] == algo]
+            .set_index("Variable_Value")
+            .reindex(var_values)
+        )
+        values = algo_data["Mem_Utilization_mean"].to_numpy()
+        valid_mask = ~np.isnan(values)
+        all_values.extend(values[valid_mask].tolist())
         ax.bar(
-            positions[i],
-            values,
+            positions[i][valid_mask],
+            values[valid_mask],
             width=PLOT_CONFIG["bar_width"],
-            label=algo,
+            label=DISPLAY_LABELS.get(algo, algo),
             color=colors.get(algo, None),
         )
 
@@ -274,16 +301,19 @@ for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
     )
     ax.set_xticks(base_positions)
     ax.set_xticklabels(var_values)
-    ax.legend(
+    legend = ax.legend(
         loc="upper left",
         fontsize=PLOT_CONFIG["legend_fontsize"],
         prop={"family": "Times New Roman", "size": PLOT_CONFIG["legend_fontsize"]},
-        frameon=True,
-        framealpha=0.25,
-        facecolor="white",
-        edgecolor="#333333",
+        frameon=False,
+        framealpha=PLOT_CONFIG["legend_framealpha"],
+        facecolor=PLOT_CONFIG["legend_facecolor"],
+        edgecolor=PLOT_CONFIG["legend_edgecolor"],
         fancybox=False,
     )
+    for text in legend.get_texts():
+        if text.get_text() == "OURS":
+            text.set_fontweight("bold")
     # Y轴从最小值开始，不从0
     y_min = min(all_values)
     y_max = max(all_values)
