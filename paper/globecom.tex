@@ -185,7 +185,7 @@ Finally, in the on-demand fetching stage, the scheduler identifies the optimal s
 \subsection{Experimental Settings}
 
 \textbf{Model library.}
-The cloud pre-trains a SuperNet $\mathcal{W}$, forming a multi-version model library of 80 task types. Each subnet is represented by $\langle S_k^{proxy}, P_k^{model}, F_k^{flops} \rangle$ in Eq.~\eqref{eq:arch_tuple}, with inference accuracy normalized to QoS in $[0.1, 1.0]$.
+We pre-trains a SuperNet $\mathcal{W}$, forming a multi-version model library of 80 task types. Each subnet is represented by $\langle S_k^{proxy}, P_k^{model}, F_k^{flops} \rangle$ in Eq.~\eqref{eq:arch_tuple}, with inference accuracy normalized to QoS in $[0.1, 1.0]$.
 
 \textbf{Edge setup.}
 The edge network contains $N = 3$ nodes by default, scaling to 5 and 7 in the scale experiment. Each node provides $C_i^{max} = 200$ GFLOPS and $M_{total} = 150$M parameters, with a fixed cross-node delay of $\tau_{comm} = 0.02$s.
@@ -217,57 +217,53 @@ Six baselines are compared: First-Fit Decreasing (\textbf{FFD}), Chain-aware Dep
 
 
 
+\subsection{End-to-End Latency}
 
+Fig.~\ref{fig:delay} reports the average end-to-end latency under three perturbation axes.
 
+Under the arrival rate perturbation (Fig.~\ref{fig:delay}(a)), all baselines show near-linear latency growth as the request rate rises from 200 to 800 requests/s. FFD, for instance, increases from 0.37\,s to 3.39\,s. The proposed algorithm keeps latency substantially lower across the entire range, growing from 0.13\,s at 200\,req/s to 1.14\,s at 800\,req/s. At $\lambda=400$, it achieves a 93\% reduction over the baseline average (0.14\,s vs.\ 2.02\,s). This is attributed to the hard-constraint filtering in Eq.~\eqref{eq:dynamic_compute_limit}: as traffic surges, the computational budget $F_i^{max}(t)$ shrinks, forcing the scheduler to select lighter subnets that maintain throughput.
 
-\begin{table}[htbp]
-\caption{Table Type Styles}
-\begin{center}
-\begin{tabular}{cccc}
-\hline
-\textbf{Table}&\multicolumn{3}{c}{\textbf{Table Column Head}} \\
-\cline{2-4} 
-\textbf{Head} & \textbf{\textit{Table column subhead}}& \textbf{\textit{Subhead}}& \textbf{\textit{Subhead}} \\
-\hline
-copy& More table copy$^{\mathrm{a}}$& &  \\
-\hline
-\multicolumn{4}{l}{$^{\mathrm{a}}$Sample of a Table footnote.}
-\end{tabular}
-\label{tab1}
-\end{center}
-\end{table}
+The chain length perturbation (Fig.~\ref{fig:delay}(c)) widens the gap further. At chain length 8, baselines incur 3.5--4.0\,s due to cascading queueing across hops, while the proposed algorithm remains at 0.23\,s---a 94\% reduction. The exponential penalty weight $w_2(t)$ in Eq.~\eqref{eq:dynamic_weights} aggressively penalizes computation-heavy models under high-load regimes, triggering timely accuracy-for-latency degradation.
 
-Figure Labels: Use 8 point Times New Roman for Figure labels. Use words 
-rather than symbols or abbreviations when writing Figure axis labels to 
-avoid confusing the reader. As an example, write the quantity 
-``Magnetization'', or ``Magnetization, M'', not just ``M''. If including 
-units in the label, present them within parentheses. Do not label axes only 
-with units. In the example, write ``Magnetization (A/m)'' or ``Magnetization 
-\{A[m(1)]\}'', not just ``A/m''. Do not label axes with a ratio of 
-quantities and units. For example, write ``Temperature (K)'', not 
-``Temperature/K''.
+Varying the number of task types (Fig.~\ref{fig:delay}(b)) confirms the same trend. At 10 task types, the proposed algorithm reduces latency by 86\% versus FFD (0.68\,s vs.\ 5.33\,s). The per-node GSTC proxy evaluation in Eq.~\eqref{eq:adaptive_gstc} enables architecture selection tailored to local resource states, avoiding the fixed-model deployment that constrains all baselines.
 
 \begin{figure*}[tbp]
 \centering
 \includegraphics[width=\textwidth]{fig/main_ar.png}
-\caption{System architecture of the proposed cloud-edge collaborative deployment framework based on ZCP and dynamic scheduling.}
-\label{fig:main_exp}
+\caption{Average end-to-end latency under three perturbation axes: (a) arrival rate, (b) number of request types, and (c) request chain length.}
+\label{fig:delay}
 \end{figure*}
+
+\subsection{Resource Utilization}
+
+Fig.~\ref{fig:mem_util} presents the average memory utilization under the same three perturbation axes.
+
+At low traffic ($\lambda=200$, Fig.~\ref{fig:mem_util}(a)), the proposed algorithm reaches 94.0\% utilization, compared to 84.4\% for the baseline average. The utility function in Eq.~\eqref{eq:utility_function} explains this: during stable periods, $w_2(t)$ remains small and the accuracy weight $w_1(t)$ dominates, encouraging selection of higher-accuracy subnets that consume more memory while staying within $M_i^{max}(t)$.
+
+As the arrival rate grows, baselines close the utilization gap because their fixed models fill memory. At $\lambda=500$, baselines reach 96--98\% while the proposed algorithm stays at 94.9\%, indicating that the dynamic penalty mechanism reserves headroom for traffic bursts.
+
+Under the chain length perturbation (Fig.~\ref{fig:mem_util}(c)), the proposed algorithm sustains above 95\% utilization across all chain lengths. The hard-constraint filtering stage ensures the selected subnet saturates available memory without exceeding it. The task type experiment (Fig.~\ref{fig:mem_util}(b)) shows a more pronounced difference: at $K=5$, the proposed algorithm utilizes 97.3\% of memory versus 63.7\% for baselines, reflecting more aggressive resource packing through dynamic model selection.
 
 \begin{figure*}[tbp]
 \centering
 \includegraphics[width=\textwidth]{fig/main_lv.png}
-\caption{System architecture of the proposed cloud-edge collaborative deployment framework based on ZCP and dynamic scheduling.}
-\label{fig:main_exp}
+\caption{Average memory utilization under three perturbation axes: (a) arrival rate, (b) number of request types, and (c) request chain length.}
+\label{fig:mem_util}
 \end{figure*}
 
+\subsection{Scalability}
 
+Fig.~\ref{fig:scale} evaluates the fitness score across three network scales: Small ($N=3$), Medium ($N=5$), and Large ($N=7$), with 100 independent trials per configuration.
+
+The proposed algorithm achieves the highest median fitness at all scales. In the Small configuration, it attains a fitness of 2.41, outperforming FFD (1.74) by 38\%. The gap widens to 59\% in the Medium configuration (3.33 vs.\ 2.09). In the Large configuration, the proposed algorithm reaches 3.94 versus 2.84 for the best baseline.
+
+Two architectural choices drive this scalability. First, the cloud-edge decoupled design removes the need for local supernet storage, so adding nodes does not increase per-node memory pressure. Second, the per-node ZCP evaluation and dynamic heuristic operate independently at each edge node, avoiding the coordination overhead that degrades centralized baselines as the network grows.
 
 \begin{figure}[tbp]
 \centering
 \includegraphics[width=\columnwidth]{fig/scale_fitness.png}
-\caption{System architecture of the proposed cloud-edge collaborative deployment framework based on ZCP and dynamic scheduling. The cloud center pre-trains the supernet offline, while the edge node relies on traffic sensing and resource monitoring to perform online ZCP evaluation and heuristic scheduling, ultimately reloading the optimal subnet on demand.}
-\label{fig:framework}
+\caption{Fitness distribution under three network scales (Small: $N=3$, Medium: $N=5$, Large: $N=7$). Each box represents 100 independent trials.}
+\label{fig:scale}
 \end{figure}
 
 
