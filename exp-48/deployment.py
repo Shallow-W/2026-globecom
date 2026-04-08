@@ -172,17 +172,17 @@ def ffd_deployment(network, services, lambda_s=None, seed=None):
 
 def lego_deployment(network, services, lambda_s=None, seed=None):
     """
-    LEGO 部署算法：三阶段负载均衡部署。
+    LEGO 部署算法：Round-Robin 均衡部署。
 
     LEGO (Load-balanced Efficient Grid Optimization) 的核心思想是
-    将实例优先放置到剩余资源最多的节点，从而实现跨节点的负载均衡。
-    这与 First Fit（首次适应）策略相反。
+    将实例均匀分布到各可行节点，使每个节点上的实例数尽量接近，
+    配合均匀路由策略实现跨节点负载均衡。
 
-    三阶段流程:
-      1. 实例创建：根据服务到达率计算所需实例数 N_m = ceil(lambda_m / mu_m)
-      2. 按需实例数降序排列服务，逐个放置实例
-      3. 每个实例放置到当前剩余资源最多的节点（最多剩余 CPU 优先），
-         实现负载均衡
+    算法流程:
+      1. 计算每个服务所需实例数 N_m = ceil(lambda_m / mu_m * margin)
+      2. 按 N_m 降序排列服务
+      3. Round-Robin 放置：轮流在可行节点间依次放置实例，
+         使得各节点实例数尽可能均衡
 
     参数:
         network:  EdgeNetwork 实例
@@ -190,7 +190,6 @@ def lego_deployment(network, services, lambda_s=None, seed=None):
         lambda_s: 每服务聚合到达率 (可选)；若为 None 则每服务默认 1 个实例
         seed:     随机种子（保留接口一致性，LEGO 本身是确定性的）
     """
-    rng = np.random.default_rng(seed)
     n_nodes = network.n_nodes
     n_services = len(services)
     deployment = Deployment(n_nodes, n_services)
@@ -204,31 +203,33 @@ def lego_deployment(network, services, lambda_s=None, seed=None):
     # ---------- 阶段 2：按 N_m 降序排列服务 ----------
     svc_order = sorted(range(n_services), key=lambda i: N_m[i], reverse=True)
 
-    # ---------- 阶段 3：逐个放置实例，选择剩余资源最多的节点 ----------
+    # ---------- 阶段 3：Round-Robin 均衡放置 ----------
     for svc_id in svc_order:
         svc = services[svc_id]
         remaining = N_m[svc_id]
 
-        for _ in range(remaining):
-            # 扫描所有节点，找到资源充足且剩余 CPU 最大的节点
-            best_node = -1
-            best_cpu = -1
+        # 收集初始可行节点
+        feasible = [v for v in range(n_nodes)
+                    if cpu_remain[v] >= 1 and gpu_remain[v] >= svc.gpu_per_instance]
+        if not feasible:
+            continue
 
-            for v in range(n_nodes):
-                # 检查资源是否足够放置一个实例
-                if cpu_remain[v] >= 1 and gpu_remain[v] >= svc.gpu_per_instance:
-                    if cpu_remain[v] > best_cpu:
-                        best_cpu = cpu_remain[v]
-                        best_node = v
+        node_idx = 0
+        while remaining > 0:
+            v = feasible[node_idx % len(feasible)]
 
-            if best_node < 0:
-                # 没有可行节点，停止放置该服务的更多实例
-                break
-
-            # 放置实例并更新剩余资源
-            deployment.X[best_node][svc_id] += 1
-            cpu_remain[best_node] -= 1
-            gpu_remain[best_node] -= svc.gpu_per_instance
+            # 检查当前节点是否仍然可行
+            if cpu_remain[v] >= 1 and gpu_remain[v] >= svc.gpu_per_instance:
+                deployment.X[v][svc_id] += 1
+                cpu_remain[v] -= 1
+                gpu_remain[v] -= svc.gpu_per_instance
+                remaining -= 1
+                node_idx += 1
+            else:
+                # 移除不可行节点
+                feasible.remove(v)
+                if not feasible:
+                    break
 
     return deployment, cpu_remain, gpu_remain
 

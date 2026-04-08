@@ -68,18 +68,18 @@ ALGO_FFD = AlgorithmSuite(
     route_fn=proportional_routing,
 )
 
-# DRS: 贪心部署 + 平方根加权概率路由
+# DRS: 贪心部署 + 按比例路由
 ALGO_DRS = AlgorithmSuite(
     name="DRS",
     deploy_fn=drs_deployment,
-    route_fn=drs_routing,
+    route_fn=proportional_routing,
 )
 
-# LEGO: 负载均衡部署 + 确定性均匀路由
+# LEGO: Round-Robin 均衡部署 + 按比例路由
 ALGO_LEGO = AlgorithmSuite(
     name="LEGO",
     deploy_fn=lego_deployment,
-    route_fn=lego_routing,
+    route_fn=proportional_routing,
 )
 
 # 全部已注册算法 (方便遍历)
