@@ -60,13 +60,25 @@ def _find_feasible_node(rng, n_nodes, cpu_remain, gpu_remain, svc):
     return int(rng.choice(candidates))
 
 
+def _required_instances(lambda_s, services, margin=1.2):
+    """计算每个服务所需实例数 N_m = ceil(lambda_m / mu_m * margin)，保证 rho 远离 1"""
+    required = []
+    for m in range(len(services)):
+        if lambda_s is not None and lambda_s[m] > 0:
+            required.append(max(1, int(ceil(lambda_s[m] / services[m].service_rate * margin))))
+        else:
+            required.append(1)
+    return required
+
+
 def random_deployment(network, services, lambda_s=None, seed=None):
     """
-    随机部署基线：将微服务实例分配到满足资源约束的节点。
+    随机部署基线 (RLS)：将微服务实例分配到满足资源约束的节点。
 
     策略:
-      1. 第一轮：保证每个服务至少部署 1 个实例
-      2. 第二轮：根据负载按比例分配剩余资源
+      1. 计算每个服务所需实例数 N_m = ceil(lambda_m / mu_m * margin)
+      2. 按 N_m 降序排列，优先满足高需求服务
+      3. 随机选择可行节点放置实例
 
     参数:
         network:  EdgeNetwork 实例
@@ -82,47 +94,21 @@ def random_deployment(network, services, lambda_s=None, seed=None):
     cpu_remain = network.cpu_capacity.copy()
     gpu_remain = network.gpu_capacity.copy()
 
-    # 第一轮：保证每个服务至少 1 个实例
-    order = rng.permutation(n_services)
-    for idx in order:
-        svc = services[idx]
-        v = _find_feasible_node(rng, n_nodes, cpu_remain, gpu_remain, svc)
-        if v >= 0:
-            deployment.X[v][svc.id] += 1
+    # 计算所需实例数并按降序排列
+    required = _required_instances(lambda_s, services)
+    svc_order = sorted(range(n_services), key=lambda i: required[i], reverse=True)
+
+    # 按需求依次部署，随机选择可行节点
+    for svc_id in svc_order:
+        svc = services[svc_id]
+        remaining = required[svc_id]
+        for _ in range(remaining):
+            v = _find_feasible_node(rng, n_nodes, cpu_remain, gpu_remain, svc)
+            if v < 0:
+                break
+            deployment.X[v][svc_id] += 1
             cpu_remain[v] -= 1
             gpu_remain[v] -= svc.gpu_per_instance
-
-    # 第二轮：按负载比例分配剩余资源
-    if lambda_s is not None:
-        total_lambda = max(np.sum(lambda_s), 1e-9)
-        # 按到达率降序排列
-        svc_order = sorted(range(n_services), key=lambda i: lambda_s[i], reverse=True)
-        # 每个服务可追加的实例数 (与负载成比例，但不超过可用资源)
-        for svc_id in svc_order:
-            svc = services[svc_id]
-            if lambda_s[svc_id] <= 0:
-                continue
-            # 目标额外实例：按负载比例分配剩余 CPU 的一定比例
-            share = lambda_s[svc_id] / total_lambda
-            remaining_cpu = max(int(np.sum(cpu_remain)), 0)
-            extra_target = max(1, int(remaining_cpu * share))
-            for _ in range(extra_target):
-                v = _find_feasible_node(rng, n_nodes, cpu_remain, gpu_remain, svc)
-                if v < 0:
-                    break
-                deployment.X[v][svc_id] += 1
-                cpu_remain[v] -= 1
-                gpu_remain[v] -= svc.gpu_per_instance
-    else:
-        # 无负载信息时，随机追加 1-2 个实例
-        for svc in services:
-            for _ in range(rng.integers(0, 3)):
-                v = _find_feasible_node(rng, n_nodes, cpu_remain, gpu_remain, svc)
-                if v < 0:
-                    break
-                deployment.X[v][svc.id] += 1
-                cpu_remain[v] -= 1
-                gpu_remain[v] -= svc.gpu_per_instance
 
     return deployment, cpu_remain, gpu_remain
 
@@ -133,16 +119,9 @@ def ffd_deployment(network, services, lambda_s=None, seed=None):
     依次将每个服务的实例装入节点（First Fit 策略）。
 
     算法步骤:
-      1. 计算每个服务所需的最少实例数 N_m = ceil(lambda_m / mu_m)，
-         保证 rho < 1（系统稳定性）。若 lambda_s 为 None 或到达率为 0，
-         则默认 N_m = 1。
-      2. 按 N_m 降序排列所有服务（Decreasing 部分）。
-      3. 对每个服务依次尝试放入节点（First Fit 策略）:
-         - 按节点编号 0, 1, 2, ... 顺序遍历
-         - 在当前节点尽可能多地放置实例:
-           min(剩余CPU, 剩余GPU // gpu_per_instance, 尚需放置数)
-         - 当前节点放不下更多时，转向下一个节点
-      4. 保证每个服务至少部署 1 个实例（即使计算得到的 N_m 为 0）。
+      1. 计算每个服务所需实例数 N_m = ceil(lambda_m / mu_m * margin)
+      2. 按 N_m 降序排列所有服务（Decreasing 部分）
+      3. First Fit 策略逐节点放入
 
     参数:
         network:  EdgeNetwork 实例
@@ -160,16 +139,8 @@ def ffd_deployment(network, services, lambda_s=None, seed=None):
     cpu_remain = network.cpu_capacity.copy()
     gpu_remain = network.gpu_capacity.copy()
 
-    # --- 步骤 1: 计算每个服务所需的实例数 N_m ---
-    N = []
-    for m in range(n_services):
-        svc = services[m]
-        if lambda_s is None or lambda_s[m] <= 0:
-            # 无负载信息或到达率为 0，默认 1 个实例
-            N.append(1)
-        else:
-            # N_m = ceil(lambda_m / mu_m)，保证 rho = lambda / (N*mu) < 1
-            N.append(max(1, ceil(lambda_s[m] / svc.service_rate)))
+    # 计算每个服务所需的实例数（含安全余量）
+    N = _required_instances(lambda_s, services)
 
     # --- 步骤 2: 按 N_m 降序排列服务（Decreasing） ---
     sorted_indices = sorted(range(n_services), key=lambda m: N[m], reverse=True)
@@ -227,15 +198,8 @@ def lego_deployment(network, services, lambda_s=None, seed=None):
     cpu_remain = network.cpu_capacity.copy()
     gpu_remain = network.gpu_capacity.copy()
 
-    # ---------- 阶段 1：计算每个服务所需的实例数 ----------
-    N_m = []
-    for svc in services:
-        if lambda_s is not None and lambda_s[svc.id] > 0:
-            # N_m = ceil(lambda_m / mu_m)，mu_m 取服务处理率的倒数对应单实例吞吐
-            instances_needed = int(ceil(lambda_s[svc.id] / svc.service_rate))
-        else:
-            instances_needed = 1
-        N_m.append(instances_needed)
+    # ---------- 阶段 1：计算每个服务所需的实例数（含安全余量）----------
+    N_m = _required_instances(lambda_s, services)
 
     # ---------- 阶段 2：按 N_m 降序排列服务 ----------
     svc_order = sorted(range(n_services), key=lambda i: N_m[i], reverse=True)
@@ -290,11 +254,9 @@ def drs_deployment(network, services, lambda_s=None, seed=None):
     DRS（确定性路由方案）部署：贪心策略，优先将实例放置在剩余资源最多的节点。
 
     算法流程:
-      1. 计算每个服务所需实例数 N_m = ceil(lambda_m / mu_m)
-         无到达率信息时默认 1 个实例
-      2. 按到达率降序排列服务（无到达率时按服务率升序，慢速优先）
-      3. 第一轮：保证每个服务至少 1 个实例，选择剩余 CPU 最多的节点
-      4. 第二轮：按负载比例分配额外实例，同样贪心选择剩余 CPU 最多的节点
+      1. 计算每个服务所需实例数 N_m = ceil(lambda_m / mu_m * margin)
+      2. 按所需实例数降序排列服务
+      3. 逐个放置实例，贪心选择剩余 CPU 最多的节点
 
     参数:
         network:  EdgeNetwork 实例
@@ -309,61 +271,22 @@ def drs_deployment(network, services, lambda_s=None, seed=None):
     cpu_remain = network.cpu_capacity.copy()
     gpu_remain = network.gpu_capacity.copy()
 
-    # 步骤 1：计算每个服务所需的实例数
-    if lambda_s is not None:
-        required = np.array(
-            [max(1, int(ceil(lambda_s[m] / services[m].service_rate)))
-             for m in range(n_services)]
-        )
-    else:
-        # 无到达率信息时，默认每服务 1 个实例
-        required = np.ones(n_services, dtype=int)
+    # 计算所需实例数（含安全余量）
+    required = _required_instances(lambda_s, services)
 
-    # 步骤 2：按到达率降序排列；无到达率时按服务率升序（慢速优先）
-    if lambda_s is not None:
-        svc_order = sorted(range(n_services), key=lambda i: lambda_s[i], reverse=True)
-    else:
-        svc_order = sorted(range(n_services), key=lambda i: services[i].service_rate)
+    # 按所需实例数降序排列
+    svc_order = sorted(range(n_services), key=lambda i: required[i], reverse=True)
 
-    # 第一轮：保证每个服务至少 1 个实例
-    for idx in svc_order:
-        svc = services[idx]
-        v = _find_greedy_node(n_nodes, cpu_remain, gpu_remain, svc)
-        if v >= 0:
-            deployment.X[v][svc.id] += 1
+    # 贪心放置：每个实例放在剩余 CPU 最多的节点
+    for svc_id in svc_order:
+        svc = services[svc_id]
+        remaining = required[svc_id]
+        for _ in range(remaining):
+            v = _find_greedy_node(n_nodes, cpu_remain, gpu_remain, svc)
+            if v < 0:
+                break
+            deployment.X[v][svc_id] += 1
             cpu_remain[v] -= 1
             gpu_remain[v] -= svc.gpu_per_instance
-
-    # 第二轮：按负载比例分配剩余实例
-    if lambda_s is not None:
-        total_lambda = max(np.sum(lambda_s), 1e-9)
-        for svc_id in svc_order:
-            svc = services[svc_id]
-            if lambda_s[svc_id] <= 0:
-                continue
-            # 已部署 1 个实例，还需部署 (required - 1) 个
-            remaining_instances = max(0, required[svc_id] - 1)
-            if remaining_instances == 0:
-                continue
-            # 按负载比例确定额外可分配的实例数上限
-            share = lambda_s[svc_id] / total_lambda
-            remaining_cpu = max(int(np.sum(cpu_remain)), 0)
-            extra_target = min(remaining_instances, max(1, int(remaining_cpu * share)))
-            for _ in range(extra_target):
-                v = _find_greedy_node(n_nodes, cpu_remain, gpu_remain, svc)
-                if v < 0:
-                    break
-                deployment.X[v][svc_id] += 1
-                cpu_remain[v] -= 1
-                gpu_remain[v] -= svc.gpu_per_instance
-    else:
-        # 无负载信息时，为每个服务在剩余资源最多的节点上追加 1 个实例
-        for idx in svc_order:
-            svc = services[idx]
-            v = _find_greedy_node(n_nodes, cpu_remain, gpu_remain, svc)
-            if v >= 0:
-                deployment.X[v][svc.id] += 1
-                cpu_remain[v] -= 1
-                gpu_remain[v] -= svc.gpu_per_instance
 
     return deployment, cpu_remain, gpu_remain
