@@ -196,36 +196,13 @@ User requests follow pipelined call chains~\cite{chain} with lengths from 3 to 1
 \textbf{Baselines.}
 Six baselines are compared: First-Fit Decreasing (\textbf{FFD}), Chain-aware Deployment Scoring (\textbf{CDS}), Random Local Search (\textbf{RLS}), Greedy (\textbf{Greedy}), Dynamic Resource Scaling (\textbf{DRS}), and \textbf{LEGO}~\cite{lego}. All baselines deploy a fixed model per task, while the proposed algorithm dynamically selects models via hard/soft constraints. The proposed algorithm runs 40 generations with population 36, $\omega = 5.0$, and a QoS-delay tradeoff of 1.2.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 \subsection{End-to-End Latency}
 
-Fig.~\ref{fig:delay} reports the average end-to-end latency under three perturbation axes.
+Fig.~\ref{fig:delay} plots the average end-to-end latency under three perturbation axes. Across all settings, the proposed algorithm maintains significantly lower latency than every baseline.
 
-Under the arrival rate perturbation (Fig.~\ref{fig:delay}(a)), all baselines show near-linear latency growth as the request rate rises from 200 to 800 requests/s. FFD, for instance, increases from 0.37\,s to 3.39\,s. The proposed algorithm keeps latency substantially lower across the entire range, growing from 0.13\,s at 200\,req/s to 1.14\,s at 800\,req/s. At $\lambda=400$, it achieves a 93\% reduction over the baseline average (0.14\,s vs.\ 2.02\,s). This is attributed to the hard-constraint filtering in Eq.~\eqref{eq:dynamic_compute_limit}: as traffic surges, the computational budget $F_i^{max}(t)$ shrinks, forcing the scheduler to select lighter subnets that maintain throughput.
+When the arrival rate increases from 200 to 800\,req/s (Fig.~\ref{fig:delay}(a)), baselines exhibit near-linear growth: FFD rises from 0.37\,s to 3.39\,s, and the other baselines follow a similar trajectory. The proposed algorithm grows from only 0.13\,s to 1.14\,s. At $\lambda=400$, its average delay of 0.14\,s is 93\% below the baseline mean of 2.02\,s. Because the hard constraint $F_i^{max}(t)$ in Eq.~\eqref{eq:dynamic_compute_limit} compresses the allowable computation budget as traffic increases, the scheduler shifts toward lighter subnets before congestion builds.
 
-The chain length perturbation (Fig.~\ref{fig:delay}(c)) widens the gap further. At chain length 8, baselines incur 3.5--4.0\,s due to cascading queueing across hops, while the proposed algorithm remains at 0.23\,s---a 94\% reduction. The exponential penalty weight $w_2(t)$ in Eq.~\eqref{eq:dynamic_weights} aggressively penalizes computation-heavy models under high-load regimes, triggering timely accuracy-for-latency degradation.
-
-Varying the number of task types (Fig.~\ref{fig:delay}(b)) confirms the same trend. At 10 task types, the proposed algorithm reduces latency by 86\% versus FFD (0.68\,s vs.\ 5.33\,s). The per-node GSTC proxy evaluation in Eq.~\eqref{eq:adaptive_gstc} enables architecture selection tailored to local resource states, avoiding the fixed-model deployment that constrains all baselines.
+Increasing the chain length (Fig.~\ref{fig:delay}(c)) amplifies the difference. At length 8, baselines suffer 3.5--4.0\,s from cascading queueing across hops, whereas the proposed algorithm stays at 0.23\,s. Here the exponential penalty $w_2(t)$ in Eq.~\eqref{eq:dynamic_weights} grows large enough to override the accuracy term $w_1(t)$, trading inference quality for queue stability. The same mechanism operates under the task-type perturbation (Fig.~\ref{fig:delay}(b)): with 10 task types the proposed algorithm records 0.68\,s versus 5.33\,s for FFD (an 86\% gap), because each node independently selects a subnet matched to its local resource state via Eq.~\eqref{eq:adaptive_gstc} rather than deploying a fixed model.
 
 \begin{figure*}[tbp]
 \centering
@@ -236,13 +213,9 @@ Varying the number of task types (Fig.~\ref{fig:delay}(b)) confirms the same tre
 
 \subsection{Resource Utilization}
 
-Fig.~\ref{fig:mem_util} presents the average memory utilization under the same three perturbation axes.
+Fig.~\ref{fig:mem_util} shows the average memory utilization under the same three axes. At $\lambda=200$ (Fig.~\ref{fig:mem_util}(a)), the proposed algorithm fills 94.0\% of available memory, 9.6 percentage points above the baseline average of 84.4\%. Since $w_2(t)$ stays small under light traffic, the utility function in Eq.~\eqref{eq:utility_function} favors higher-accuracy (and thus larger) subnets within the hard memory bound $M_i^{max}(t)$. As the rate climbs to 500\,req/s, baselines catch up (96--98\%) because their fixed models occupy most of the node capacity, while the proposed algorithm holds at 94.9\%, leaving headroom for sudden spikes.
 
-At low traffic ($\lambda=200$, Fig.~\ref{fig:mem_util}(a)), the proposed algorithm reaches 94.0\% utilization, compared to 84.4\% for the baseline average. The utility function in Eq.~\eqref{eq:utility_function} explains this: during stable periods, $w_2(t)$ remains small and the accuracy weight $w_1(t)$ dominates, encouraging selection of higher-accuracy subnets that consume more memory while staying within $M_i^{max}(t)$.
-
-As the arrival rate grows, baselines close the utilization gap because their fixed models fill memory. At $\lambda=500$, baselines reach 96--98\% while the proposed algorithm stays at 94.9\%, indicating that the dynamic penalty mechanism reserves headroom for traffic bursts.
-
-Under the chain length perturbation (Fig.~\ref{fig:mem_util}(c)), the proposed algorithm sustains above 95\% utilization across all chain lengths. The hard-constraint filtering stage ensures the selected subnet saturates available memory without exceeding it. The task type experiment (Fig.~\ref{fig:mem_util}(b)) shows a more pronounced difference: at $K=5$, the proposed algorithm utilizes 97.3\% of memory versus 63.7\% for baselines, reflecting more aggressive resource packing through dynamic model selection.
+The task-type perturbation (Fig.~\ref{fig:mem_util}(b)) exposes the largest gap: at $K=5$ the proposed algorithm uses 97.3\% of memory versus only 63.7\% for baselines. Baselines spread a small number of fixed models across nodes, under-utilizing memory; the proposed algorithm packs larger, accuracy-oriented subnets until the hard constraint binds. Under chain-length variation (Fig.~\ref{fig:mem_util}(c)), utilization stays above 95\% for all algorithms at longer chains, as the increased hop count forces more deployments per node.
 
 \begin{figure*}[tbp]
 \centering
@@ -253,11 +226,9 @@ Under the chain length perturbation (Fig.~\ref{fig:mem_util}(c)), the proposed a
 
 \subsection{Scalability}
 
-Fig.~\ref{fig:scale} evaluates the fitness score across three network scales: Small ($N=3$), Medium ($N=5$), and Large ($N=7$), with 100 independent trials per configuration.
+Fig.~\ref{fig:scale} reports the fitness distribution over 100 independent trials at three network sizes. The proposed algorithm leads at every scale: its median fitness rises from 2.41 (Small, $N\!=\!3$) to 3.33 (Medium, $N\!=\!5$) to 3.94 (Large, $N\!=\!7$), whereas the best baseline (FFD at Small and Medium, LEGO at Large) only reaches 1.74, 2.09, and 2.84, respectively. The relative advantage grows from 38\% at Small to 59\% at Medium before settling at 39\% at Large.
 
-The proposed algorithm achieves the highest median fitness at all scales. In the Small configuration, it attains a fitness of 2.41, outperforming FFD (1.74) by 38\%. The gap widens to 59\% in the Medium configuration (3.33 vs.\ 2.09). In the Large configuration, the proposed algorithm reaches 3.94 versus 2.84 for the best baseline.
-
-Two architectural choices drive this scalability. First, the cloud-edge decoupled design removes the need for local supernet storage, so adding nodes does not increase per-node memory pressure. Second, the per-node ZCP evaluation and dynamic heuristic operate independently at each edge node, avoiding the coordination overhead that degrades centralized baselines as the network grows.
+Fitness increases with scale for all algorithms because more nodes spread the routing load and reduce queueing. The proposed algorithm gains more from additional nodes because each one runs an independent ZCP evaluation and heuristic schedule; there is no central coordinator whose overhead grows with $N$. The cloud-edge split also means that adding a node requires no extra local supernet storage, only the lightweight parser and proxy scorer.
 
 \begin{figure}[tbp]
 \centering
