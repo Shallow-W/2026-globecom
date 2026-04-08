@@ -185,7 +185,7 @@ Finally, in the on-demand fetching stage, the scheduler identifies the optimal s
 \subsection{Experimental Settings}
 
 \textbf{Model library.}
-We pre-trains a SuperNet $\mathcal{W}$, forming a multi-version model library of 80 task types. Each subnet is represented by $\langle S_k^{proxy}, P_k^{model}, F_k^{flops} \rangle$ in Eq.~\eqref{eq:arch_tuple}, with inference accuracy normalized to QoS in $[0.1, 1.0]$.
+We pre-train a SuperNet $\mathcal{W}$, forming a multi-version model library of 80 task types. Each subnet is represented by $\langle S_k^{proxy}, P_k^{model}, F_k^{flops} \rangle$ in Eq.~\eqref{eq:arch_tuple}, with inference accuracy normalized to QoS in $[0.1, 1.0]$.
 
 \textbf{Edge setup.}
 The edge network contains $N = 3$ nodes by default, scaling to 5 and 7 in the scale experiment. Each node provides $C_i^{max} = 200$ GFLOPS and $M_{total} = 150$M parameters, with a fixed cross-node delay of $\tau_{comm} = 0.02$s.
