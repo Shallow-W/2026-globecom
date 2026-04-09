@@ -37,11 +37,16 @@ def build_proxy_knowledge(ctx: ExperimentContext) -> Dict[str, Dict[str, int]]:
         flops_idx = int(np.argmin([v["flops"] for v in versions]))
         params_idx = int(np.argmin([v["model_params"] for v in versions]))
         mid_idx = len(versions) // 2
+        max_valid = min(ctx.n_versions - 1, len(versions) - 1)
         proxy[task] = {
             "qos": _safe_version_idx(ctx, task, qos_idx),
             "flops": _safe_version_idx(ctx, task, flops_idx),
             "params": _safe_version_idx(ctx, task, params_idx),
             "mid": _safe_version_idx(ctx, task, mid_idx),
+            "tier0": 0,
+            "tier1": max(0, min(1, max_valid)),
+            "tier2": max(0, min(2, max_valid)),
+            "tier_max": max_valid,
         }
     return proxy
 
@@ -202,9 +207,10 @@ def repair_individual(
 class BaselineAlgorithm(DeploymentAlgorithm):
     """Common baseline implementation with different placement policies."""
 
-    def __init__(self, name: str, policy: str):
+    def __init__(self, name: str, policy: str, version_key: str = "params"):
         super().__init__(name)
         self.policy = policy
+        self.version_key = version_key
 
     def deploy(self, ctx: ExperimentContext, rng: np.random.Generator) -> np.ndarray:
         proxy = build_proxy_knowledge(ctx)
@@ -228,7 +234,7 @@ class BaselineAlgorithm(DeploymentAlgorithm):
         for task in tasks_sorted:
             s_idx = ctx.current_tasks.index(task)
             # Intentionally use lightweight low-quality baseline models.
-            v_idx = proxy[task]["params"]
+            v_idx = proxy[task][self.version_key]
             model_params = float(ctx.tasks_data[task][v_idx]["model_params"])
             n_inst = required_instances(ctx, task, v_idx)
 
@@ -725,7 +731,10 @@ class OurAlgorithm(DeploymentAlgorithm):
 
 
 def create_algorithm(
-    name: str, our_generations: int = 40, our_pop_size: int = 36
+    name: str,
+    our_generations: int = 40,
+    our_pop_size: int = 36,
+    baseline_version_key: str = "params",
 ) -> DeploymentAlgorithm:
     """Factory for all supported algorithms."""
 
@@ -733,16 +742,16 @@ def create_algorithm(
     if name == "our":
         return OurAlgorithm(generations=our_generations, pop_size=our_pop_size)
     if name == "ffd-m":
-        return BaselineAlgorithm(name="ffd-m", policy="first_fit")
+        return BaselineAlgorithm(name="ffd-m", policy="first_fit", version_key=baseline_version_key)
     if name == "cds-m":
-        return BaselineAlgorithm(name="cds-m", policy="cds")
+        return BaselineAlgorithm(name="cds-m", policy="cds", version_key=baseline_version_key)
     if name == "random-m":
-        return BaselineAlgorithm(name="random-m", policy="random")
+        return BaselineAlgorithm(name="random-m", policy="random", version_key=baseline_version_key)
     if name == "greedy-m":
-        return BaselineAlgorithm(name="greedy-m", policy="greedy")
+        return BaselineAlgorithm(name="greedy-m", policy="greedy", version_key=baseline_version_key)
     if name == "lego":
-        return BaselineAlgorithm(name="lego", policy="lego")
+        return BaselineAlgorithm(name="lego", policy="lego", version_key=baseline_version_key)
     if name == "drs":
-        return BaselineAlgorithm(name="drs", policy="drs")
+        return BaselineAlgorithm(name="drs", policy="drs", version_key=baseline_version_key)
 
     raise ValueError(f"Unknown algorithm: {name}")
