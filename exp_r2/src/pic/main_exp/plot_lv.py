@@ -67,14 +67,13 @@ def add_noise_by_var_values(df, baselines, var_values, direction, noise_level, c
 
 # ============ 数据路径配置 ============
 DATA_PATHS = {
-    "ar": "d:/Item/lab/2026globcom/exp_r2/src/pic/main_exp/ar.csv",
-    "ntask": "d:/Item/lab/2026globcom/exp_r2/src/pic/main_exp/ntask.csv",
-    "chainlen": "d:/Item/lab/2026globcom/exp_r2/src/pic/main_exp/chainlen.csv",
+    "ar": "d:/Item/rep/2026-globecom/exp_r2/src/pic/main_exp/ar.csv",
+    "ntask": "d:/Item/rep/2026-globecom/exp_r2/src/pic/main_exp/ntask.csv",
 }
 
 # ============ 绘图配置 ============
 PLOT_CONFIG = {
-    "fig_size": (18, 5),  # 图表尺寸
+    "fig_size": (12, 5),  # 图表尺寸
     "linewidth": 2,  # 线条宽度
     "markersize": 6,  # 标记大小
     "xlabel_fontsize": 20,  # x轴标签字号
@@ -95,7 +94,7 @@ PLOT_CONFIG = {
 # ============ 读取数据并应用噪声 ============
 np.random.seed(666)
 dfs = {}
-for exp_name in ["ar", "ntask", "chainlen"]:
+for exp_name in ["ar", "ntask"]:
     dfs[exp_name] = pd.read_csv(DATA_PATHS[exp_name])
     # 只对配置的实验添加噪声
     if exp_name in NOISE_CONFIG["experiments"]:
@@ -133,7 +132,7 @@ plt.rcParams.update(
         "mathtext.bf": "Times New Roman:bold",
     }
 )
-fig, axes = plt.subplots(1, 3, figsize=PLOT_CONFIG["fig_size"])
+fig, axes = plt.subplots(1, 2, figsize=PLOT_CONFIG["fig_size"])
 fig.suptitle("", fontsize=PLOT_CONFIG["title_fontsize"], fontweight="bold")
 
 colors = {
@@ -160,7 +159,6 @@ markers = {
 LABELS = {
     "ar": ("(a) Arrival Rate of Requests", ""),
     "ntask": ("(b) Number of Request Types", ""),
-    "chainlen": ("(c) Length of Requests", ""),
 }
 
 ALGORITHM_ORDER = ["CDS", "DRS", "FFD", "GREEDY", "LEGO", "RLS", "OURS"]
@@ -231,7 +229,7 @@ X_VALUE_FILTER = {
 #         tick_label.set_fontname("Times New Roman")
 
 # ============ 柱状图绘图 ============
-for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
+for idx, exp_name in enumerate(["ar", "ntask"]):
     df = dfs[exp_name].copy()
     df["Algorithm_Norm"] = df["Algorithm"].astype(str).str.strip().str.upper()
     ax = axes[idx]
@@ -332,14 +330,14 @@ for idx, exp_name in enumerate(["ar", "ntask", "chainlen"]):
 
 plt.tight_layout()
 plt.savefig(
-    "d:/Item/lab/2026globcom/exp_r2/src/pic/main_exp/lv.png",
+    "lv.png",
     dpi=PLOT_CONFIG["dpi"],
     bbox_inches="tight",
 )
 plt.savefig(
-    "d:/Item/lab/2026globcom/exp_r2/src/pic/main_exp/lv.eps",
+    "lv.eps",
     format="eps",
     bbox_inches="tight",
 )
 
-print("图表已保存至: d:/Item/lab/2026globcom/exp_r2/src/pic/main_exp/lv.png")
+print("图表已保存至: lv.png")
