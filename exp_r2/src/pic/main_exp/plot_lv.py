@@ -67,8 +67,8 @@ def add_noise_by_var_values(df, baselines, var_values, direction, noise_level, c
 
 # ============ 数据路径配置 ============
 DATA_PATHS = {
-    "ar": "d:/Item/rep/2026-globecom/exp_r2/src/pic/main_exp/ar.csv",
-    "ntask": "d:/Item/rep/2026-globecom/exp_r2/src/pic/main_exp/ntask.csv",
+    "ar": "./exp_r2/src/pic/main_exp/ar.csv",
+    "ntask": "./exp_r2/src/pic/main_exp/ntask.csv",
 }
 
 # ============ 绘图配置 ============
@@ -76,11 +76,11 @@ PLOT_CONFIG = {
     "fig_size": (12, 5),  # 图表尺寸
     "linewidth": 2,  # 线条宽度
     "markersize": 6,  # 标记大小
-    "xlabel_fontsize": 20,  # x轴标签字号
-    "ylabel_fontsize": 16,  # y轴标签字号
+    "xlabel_fontsize": 28,  # x轴标签字号
+    "ylabel_fontsize": 20,  # y轴标签字号
     "title_fontsize": 16,  # 标题字号
-    "tick_labelsize": 14,  # 刻度数字字号
-    "legend_fontsize": 12,  # 图例字号
+    "tick_labelsize": 18,  # 刻度数字字号
+    "legend_fontsize": 16,  # 图例字号
     "legend_framealpha": 1.0,  # 图例背景透明度
     "legend_edgecolor": "#FFFFFF",  # 图例边框颜色
     "legend_facecolor": "#F8F8F8",  # 图例背景颜色
@@ -330,12 +330,12 @@ for idx, exp_name in enumerate(["ar", "ntask"]):
 
 plt.tight_layout()
 plt.savefig(
-    "lv.png",
+    "./exp_r2/src/pic/main_exp/lv.png",
     dpi=PLOT_CONFIG["dpi"],
     bbox_inches="tight",
 )
 plt.savefig(
-    "lv.eps",
+    "./exp_r2/src/pic/main_exp/lv.eps",
     format="eps",
     bbox_inches="tight",
 )

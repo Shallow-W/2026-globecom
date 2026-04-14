@@ -11,12 +11,14 @@ load and capacity are randomly perturbed:
 Usage (from exp_r2 root):
   python src/pic/exp_6/run_exp.py
   python src/pic/exp_6/run_exp.py --quick
+  python .\run_exp.py --peak-loads 1.6 2.4 1.9 2.8 --peak-jitter 0.08
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import sys
 from copy import deepcopy
 from typing import Any, Dict, List
 
@@ -25,6 +27,10 @@ import pandas as pd
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "..", "..", ".."))
+
+# Allow running this file directly from exp_6/ or any other working directory.
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
 
 from src.framework.algorithms import (
     BaselineAlgorithm,
@@ -39,8 +45,6 @@ from src.framework.constants import DEFAULT_ALGORITHMS
 from src.framework.data_loader import load_and_prepare_data
 from src.framework.evaluator import evaluate_matrix
 from src.framework.experiment_builder import build_context
-
-
 
 
 class _LegoExp6(BaselineAlgorithm):
@@ -168,6 +172,8 @@ def run_dynamic_adaptation(
     our_pop_size: int,
     load_range: tuple = (0.3, 2.0),
     cap_range: tuple = (0.5, 1.5),
+    manual_peak_loads: List[float] | None = None,
+    manual_peak_jitter: float = 0.0,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     master_rng = np.random.default_rng(seed)
@@ -198,15 +204,41 @@ def run_dynamic_adaptation(
         # Build piecewise-constant regime levels
         plateau_len = max(6, n_steps // 8)
         n_regimes = int(np.ceil(n_steps / plateau_len)) + 1
-        # Alternate high/low with random variation
+
+        manual_peak_array = None
+        if manual_peak_loads:
+            manual_peak_array = np.array(manual_peak_loads, dtype=float)
+            manual_peak_array = np.clip(manual_peak_array, load_lo, load_hi)
+
+        # Alternate high/low with random variation.
+        # High-load plateaus follow a repeating envelope so neighboring peaks
+        # are intentionally a bit different (one bigger, one smaller).
         regime_loads, regime_caps = [], []
+        high_peak_pattern = np.array([0.72, 0.96, 0.82, 1.00], dtype=float)
+        high_band_lo = min(load_hi, max(load_lo + 0.2, load_hi - 0.7))
+        high_band_span = max(0.0, load_hi - high_band_lo)
+        low_band_hi = min(load_hi, max(load_lo, min(load_hi - 0.4, load_lo + 0.35)))
+
         for i in range(n_regimes):
             if i % 2 == 0:
-                regime_loads.append(rep_rng.uniform(load_lo, load_lo + 0.3))
-                regime_caps.append(rep_rng.uniform(cap_hi - 0.2, cap_hi))
+                regime_loads.append(rep_rng.uniform(load_lo, low_band_hi))
+                regime_caps.append(rep_rng.uniform(max(cap_lo, cap_hi - 0.2), cap_hi))
             else:
-                regime_loads.append(rep_rng.uniform(load_hi - 0.5, load_hi))
-                regime_caps.append(rep_rng.uniform(cap_lo, cap_lo + 0.2))
+                if manual_peak_array is not None:
+                    peak_id = (i // 2) % len(manual_peak_array)
+                    target = float(manual_peak_array[peak_id])
+                    if manual_peak_jitter > 0:
+                        target += float(
+                            rep_rng.uniform(-manual_peak_jitter, manual_peak_jitter)
+                        )
+                    load_peak = float(np.clip(target, load_lo, load_hi))
+                else:
+                    peak_id = (i // 2) % len(high_peak_pattern)
+                    target = high_band_lo + high_peak_pattern[peak_id] * high_band_span
+                    jitter = rep_rng.uniform(-0.08, 0.08) * high_band_span
+                    load_peak = float(np.clip(target + jitter, high_band_lo, load_hi))
+                regime_loads.append(load_peak)
+                regime_caps.append(rep_rng.uniform(cap_lo, min(cap_hi, cap_lo + 0.2)))
         regime_loads[0] = 1.0  # start at baseline
         regime_caps[0] = 1.0
 
@@ -231,10 +263,10 @@ def run_dynamic_adaptation(
 
         # Each baseline uses a different model-selection strategy
         baseline_vk = {
-            "ffd-m": "tier1",      # second-tier model, first-fit → moderate delay
-            "random-m": "tier1",   # second-tier model, random placement → higher than FFD
-            "lego": "tier1",       # mixed tier via _LegoExp6 → slightly below FFD
-            "drs": "tier_max",     # heaviest model → highest delay
+            "ffd-m": "tier1",  # second-tier model, first-fit → moderate delay
+            "random-m": "tier1",  # second-tier model, random placement → higher than FFD
+            "lego": "tier1",  # mixed tier via _LegoExp6 → slightly below FFD
+            "drs": "tier_max",  # heaviest model → highest delay
             "cds-m": "tier0",
             "greedy-m": "tier0",
         }
@@ -274,9 +306,7 @@ def run_dynamic_adaptation(
                         generations=our_generations,
                         pop_size=our_pop_size,
                     )
-                    genes = algo.deploy(
-                        perturbed_ctx, np.random.default_rng(algo_seed)
-                    )
+                    genes = algo.deploy(perturbed_ctx, np.random.default_rng(algo_seed))
                 else:
                     # Fixed deployment from step 0
                     genes = initial_genes[algo_name]
@@ -301,18 +331,13 @@ def run_dynamic_adaptation(
                 )
 
             if step == 0 or (step + 1) % 10 == 0:
-                print(
-                    f"  Step {step:3d}/{n_steps} | "
-                    f"load={lf:.2f} cap={cf:.2f}"
-                )
+                print(f"  Step {step:3d}/{n_steps} | " f"load={lf:.2f} cap={cf:.2f}")
 
     return rows
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Exp6: dynamic adaptation experiment"
-    )
+    parser = argparse.ArgumentParser(description="Exp6: dynamic adaptation experiment")
     parser.add_argument(
         "--excel",
         type=str,
@@ -320,9 +345,7 @@ def main() -> None:
             PROJECT_DIR, "data", "evaluation_tables_20260325_163931.xlsx"
         ),
     )
-    parser.add_argument(
-        "--algorithms", nargs="+", default=DEFAULT_ALGORITHMS
-    )
+    parser.add_argument("--algorithms", nargs="+", default=DEFAULT_ALGORITHMS)
     parser.add_argument("--n-steps", type=int, default=60)
     parser.add_argument("--replicates", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
@@ -349,6 +372,20 @@ def main() -> None:
         default=[0.5, 1.4],
         help="Capacity factor range (min max), default: 0.5 1.4",
     )
+    parser.add_argument(
+        "--peak-loads",
+        type=float,
+        nargs=4,
+        default=None,
+        metavar=("P1", "P2", "P3", "P4"),
+        help="Manual load factors for four high peaks, e.g. --peak-loads 1.8 2.7 2.1 2.9",
+    )
+    parser.add_argument(
+        "--peak-jitter",
+        type=float,
+        default=0.0,
+        help="Optional +-jitter around each manual peak (default 0, no jitter)",
+    )
 
     args = parser.parse_args()
 
@@ -366,6 +403,11 @@ def main() -> None:
     print(f"Algorithms: {args.algorithms}")
     print(f"Steps: {n_steps}, Replicates: {replicates}")
     print(f"Load range: {load_range}, Cap range: {cap_range}")
+    if args.peak_loads:
+        print(
+            f"Manual high peaks: {args.peak_loads}, "
+            f"peak jitter: +/-{args.peak_jitter}"
+        )
 
     rows = run_dynamic_adaptation(
         tasks_list=tasks_list,
@@ -378,6 +420,8 @@ def main() -> None:
         our_pop_size=args.our_pop_size,
         load_range=load_range,
         cap_range=cap_range,
+        manual_peak_loads=args.peak_loads,
+        manual_peak_jitter=args.peak_jitter,
     )
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -388,21 +432,16 @@ def main() -> None:
     print(f"\nSaved: {raw_path}")
 
     # Summary: mean/std per (step, algorithm) across replicates
-    summary = (
-        df.groupby(["Step", "Algorithm"], as_index=False)
-        .agg(
-            Load_Factor=("Load_Factor", "mean"),
-            Capacity_Factor=("Capacity_Factor", "mean"),
-            Total_Delay_D_mean=("Total_Delay_D", "mean"),
-            Total_Delay_D_std=("Total_Delay_D", "std"),
-            Avg_QoS_Q_mean=("Avg_QoS_Q", "mean"),
-            Comp_Delay_mean=("Comp_Delay", "mean"),
-            Comm_Delay_mean=("Comm_Delay", "mean"),
-        )
+    summary = df.groupby(["Step", "Algorithm"], as_index=False).agg(
+        Load_Factor=("Load_Factor", "mean"),
+        Capacity_Factor=("Capacity_Factor", "mean"),
+        Total_Delay_D_mean=("Total_Delay_D", "mean"),
+        Total_Delay_D_std=("Total_Delay_D", "std"),
+        Avg_QoS_Q_mean=("Avg_QoS_Q", "mean"),
+        Comp_Delay_mean=("Comp_Delay", "mean"),
+        Comm_Delay_mean=("Comm_Delay", "mean"),
     )
-    summary_path = os.path.join(
-        args.output_dir, "exp6_dynamic_adaptation_summary.csv"
-    )
+    summary_path = os.path.join(args.output_dir, "exp6_dynamic_adaptation_summary.csv")
     summary.to_csv(summary_path, index=False, encoding="utf-8-sig")
     print(f"Saved: {summary_path}")
 
