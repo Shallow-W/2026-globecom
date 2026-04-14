@@ -187,9 +187,11 @@ We pre-train a supernet offline and build a multi-task model library for online 
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{End-to-End Latency}
+\subsection{Static Performance}
 
-As traffic increases, the hard bound $F_i^{max}(t)$ in Eq.~\eqref{eq:dynamic_compute_limit} narrows the feasible compute region, and the scheduler naturally shifts to lighter subnets. Therefore, latency remains consistently below all baselines across the three perturbation axes in Fig.~\ref{fig:delay}. Under arrival-rate perturbation (Fig.~\ref{fig:delay}(a)), our latency grows much more slowly as load increases, while all baselines rise rapidly and remain at high levels. For example, at $\lambda=400$, our delay is 0.14\,s, about 93\% lower than the baseline mean (2.02\,s). Similar gaps are observed on the other two axes, where baseline methods also stay markedly higher. These gains come from adaptive subnet selection (Eq.~\eqref{eq:adaptive_gstc}) and dynamic penalty reweighting (Eq.~\eqref{eq:dynamic_weights}), which prioritize queue stability under heavy traffic.
+We first report static-condition results from two aspects: end-to-end latency and resource utilization.
+
+\textbf{End-to-End Latency:} As traffic increases, the hard bound $F_i^{max}(t)$ in Eq.~\eqref{eq:dynamic_compute_limit} narrows the feasible compute region, and the scheduler naturally shifts to lighter subnets. Therefore, latency remains consistently below all baselines across the three perturbation axes in Fig.~\ref{fig:delay}. Under arrival-rate perturbation (Fig.~\ref{fig:delay}(a)), our latency grows much more slowly as load increases, while all baselines rise rapidly and remain at high levels. For example, at $\lambda=400$, our delay is 0.14\,s, about 93\% lower than the baseline mean (2.02\,s). Similar gaps are observed on the other two axes, where baseline methods also stay markedly higher. These gains come from adaptive subnet selection (Eq.~\eqref{eq:adaptive_gstc}) and dynamic penalty reweighting (Eq.~\eqref{eq:dynamic_weights}), which prioritize queue stability under heavy traffic.
 
 \begin{figure}[tbp]
 \centering
@@ -213,17 +215,17 @@ As traffic increases, the hard bound $F_i^{max}(t)$ in Eq.~\eqref{eq:dynamic_com
 \end{figure}
 
 
-\subsection{Resource Utilization}
-
-Fig.~\ref{fig:mem_util} reflects a clear adaptive-deployment behavior. Under light load, our scheduler tends to select higher-accuracy subnets, so memory utilization is intentionally higher and edge resources are used more fully. For example, at $\lambda=200$, our utilization reaches 94\%. By contrast, fixed-model baselines often under-utilize memory at low load and then move close to saturation as load increases. This trend is consistent with Eq.~\eqref{eq:utility_function}, where low-load settings favor quality-oriented model choices and high-load settings increase resource penalties.
+\textbf{Resource Utilization:} Under the same static settings, Fig.~\ref{fig:mem_util} reflects a clear adaptive-deployment behavior. Under light load, our scheduler tends to select higher-accuracy subnets, so memory utilization is intentionally higher and edge resources are used more fully. For example, at $\lambda=200$, our utilization reaches 94\%. By contrast, fixed-model baselines often under-utilize memory at low load and then move close to saturation as load increases. This trend is consistent with Eq.~\eqref{eq:utility_function}, where low-load settings favor quality-oriented model choices and high-load settings increase resource penalties.
 
 
 
 \subsection{Scalability}
 
-We further evaluate how performance changes with network scale under a fixed-load setting. As shown in Fig.~\ref{fig:scale}, three topologies are considered: Small ($N=3$), Medium ($N=5$), and Large ($N=7$). As scale increases, the network provides more aggregate resources, and the service quality of all methods improves accordingly. Even in this case, our method remains consistently better than all baselines, because it can dynamically switch to higher-accuracy models when resources are available. In terms of median fitness, our method achieves 2.41, 3.33, and 3.94 from Small to Large, while the best baseline reaches 1.74, 2.09, and 2.84, corresponding to relative gains of 38\%, 59\%, and 39\%, respectively.
+We analyze scalability along two complementary dimensions: horizontal scaling and vertical scaling.
 
-To further quantify resource impact, we use a unified resource factor to adjust node resource scale in Fig.~\ref{fig:exp5}. As the factor increases, available resources grow. Our method remains lower throughout, since it can dynamically deploy models that better match current resource conditions. At factor 0.5, our delay is about 1.46\,s, while baselines are around 3.2\,s, corresponding to an improvement of roughly 54\%. At factor 1.5, delays of all methods become close, indicating that resources are already abundant and the performance gap naturally narrows. This result is consistent with the scale experiment and confirms that adaptive model switching improves robustness under both topology and resource variations.
+\textbf{Horizontal Scaling:} We first evaluate performance changes when expanding the number of edge nodes under fixed load. As shown in Fig.~\ref{fig:scale}, three topologies are considered: Small ($N=3$), Medium ($N=5$), and Large ($N=7$). As scale increases, the network provides more aggregate resources, and the service quality of all methods improves accordingly. Even in this case, our method remains consistently better than all baselines, because it can dynamically switch to higher-accuracy models when resources are available. In terms of median fitness, our method achieves 2.41, 3.33, and 3.94 from Small to Large, while the best baseline reaches 1.74, 2.09, and 2.84, corresponding to relative gains of 38\%, 59\%, and 39\%, respectively.
+
+\textbf{Vertical Scaling:} We further quantify resource impact by using a unified resource factor to adjust per-node resource scale in Fig.~\ref{fig:exp5}. As the factor increases, available resources grow. Our method remains lower throughout, since it can dynamically deploy models that better match current resource conditions. At factor 0.5, our delay is about 1.46\,s, while baselines are around 3.2\,s, corresponding to an improvement of roughly 54\%. At factor 1.5, delays of all methods become close, indicating that resources are already abundant and the performance gap naturally narrows. This result is consistent with the horizontal-scaling experiment and confirms that adaptive model switching improves robustness under both topology and per-node resource variations.
 
 
 
