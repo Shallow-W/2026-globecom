@@ -15,18 +15,19 @@ OUTPUT_EPS = BASE_DIR / "scale_fitness.eps"
 
 
 PLOT_CONFIG = {
-    "fig_size": (7.16, 4.2),
-    "xlabel_fontsize": 14,
-    "ylabel_fontsize": 14,
+    "fig_size": (7, 4),
+    "xlabel_fontsize": 20,
+    "ylabel_fontsize": 20,
     "title_fontsize": 14,
-    "tick_labelsize": 12,
-    "legend_fontsize": 11,
+    "tick_labelsize": 18,
+    "legend_fontsize": 16,
     "legend_framealpha": 1.0,
     "legend_edgecolor": "#FFFFFF",
     "legend_facecolor": "#F8F8F8",
     "grid_linewidth": 0.8,
     "grid_color": "#EBEBEB",
     "dpi": 300,
+    "bar_width": 0.13,
     "box_width": 0.16,
     "box_group_gap": 1.35,
     "box_linewidth": 0.9,
@@ -41,15 +42,21 @@ PLOT_CONFIG = {
     "ci_zscore": 1.96,
 }
 
+COLORS = {
+    "our": "#d62728",
+    "ffd-m": "#2ca02c",
+    "lego": "#9467bd",
+    "drs": "#ff7f0e",
+    "random-m": "#7f7f7f",
+}
+
 
 COLORS = {
-    "CDS": "#8ECFC9",
     "RLS": "#EEC994",
     "FFD": "#AFDEF3",
-    "DRS": "#A5A3C3",
-    "LEGO": "#FFE6B7",
-    "GREEDY": "#F5EFBA",
-    "OURS": "#FA7F6F",
+    "DRS": "#FFE6B7",
+    "LEGO": "#A5A3C3",
+    "OURS": "#F67B7C",
 }
 
 
@@ -104,23 +111,27 @@ MANUAL_ADJUSTMENT_CONFIG = {
         #     "small": {"upper_scale": 0.90, "lower_scale": 0.92, "shift": 0.0},
         # },
         "DRS": {
-            "small": {"upper_scale": 2.30, "lower_scale": 2.30, "shift": -0.3},
+            "small": {"upper_scale": 2.30, "lower_scale": 2.30, "shift": 0},
             "medium": {"upper_scale": 1, "lower_scale": 1, "shift": 0.1},
+            "large": {"upper_scale": 1, "lower_scale": 1, "shift": 0},
         },
         "FFD": {
-            "small": {"upper_scale": 2.50, "lower_scale": 3.90, "shift": -0.3},
-            "medium": {"upper_scale": 0.8, "lower_scale": 1.20, "shift": 0.1},
+            "small": {"upper_scale": 2.50, "lower_scale": 3.90, "shift": 0},
+            "medium": {"upper_scale": 0.8, "lower_scale": 1.20, "shift": 0.2},
+            "large": {"upper_scale": 1, "lower_scale": 1, "shift": 0.2},
         },
         "LEGO": {
-            "small": {"upper_scale": 3.0, "lower_scale": 3.50, "shift": -0.3},
-            "medium": {"upper_scale": 1.3, "lower_scale": 0.80, "shift": 0.1},
+            "small": {"upper_scale": 3.0, "lower_scale": 3.50, "shift": 0.1},
+            "medium": {"upper_scale": 1.3, "lower_scale": 0.80, "shift": 0.5},
+            "large": {"upper_scale": 1, "lower_scale": 1, "shift": 0.6},
         },
         "RLS": {
-            "small": {"upper_scale": 2.30, "lower_scale": 2.30, "shift": -0.3},
-            "medium": {"upper_scale": 1, "lower_scale": 1, "shift": 0.1},
+            "small": {"upper_scale": 2.30, "lower_scale": 2.30, "shift": 0.05},
+            "medium": {"upper_scale": 1, "lower_scale": 1, "shift": 0.2},
+            "large": {"upper_scale": 1, "lower_scale": 1, "shift": 0.15},
         },
         "OURS": {
-            "small": {"upper_scale": 1.70, "lower_scale": 1.60, "shift": -0.3},
+            "small": {"upper_scale": 1.70, "lower_scale": 1.60, "shift": 0},
             "medium": {"upper_scale": 1.0, "lower_scale": 0.70, "shift": 0.0},
             "large": {"upper_scale": 0.8, "lower_scale": 0.70, "shift": 0.2},
         },
@@ -456,10 +467,11 @@ def main() -> None:
     #         markeredgewidth=0.0,
     #     )
 
-    all_box_values = []
+    all_bar_values = []
     legend_handles = []
     for i, algo in enumerate(algorithms):
-        samples_by_scale = []
+        mean_values = []
+        std_values = []
         positions_by_scale = []
 
         for scale, pos in zip(scales, positions[i]):
@@ -473,41 +485,32 @@ def main() -> None:
             )
             if values.size == 0:
                 continue
-            samples_by_scale.append(values)
-            positions_by_scale.append(pos)
-            all_box_values.extend(values.tolist())
 
-        if not samples_by_scale:
+            mean_val = float(np.mean(values))
+            std_val = float(np.std(values, ddof=1)) if values.size >= 2 else 0.0
+
+            mean_values.append(mean_val)
+            std_values.append(std_val)
+            positions_by_scale.append(pos)
+            all_bar_values.extend([mean_val - std_val, mean_val + std_val])
+
+        if not positions_by_scale:
             continue
 
-        boxplot = ax.boxplot(
-            samples_by_scale,
-            positions=positions_by_scale,
-            widths=PLOT_CONFIG["box_width"] * 0.82,
-            patch_artist=True,
-            showfliers=False,
-            manage_ticks=False,
-            boxprops={
-                "linewidth": PLOT_CONFIG["box_linewidth"],
-                "edgecolor": "#4D4D4D",
-            },
-            whiskerprops={
-                "linewidth": PLOT_CONFIG["whisker_linewidth"],
-                "color": "#4D4D4D",
-            },
-            capprops={
-                "linewidth": PLOT_CONFIG["whisker_linewidth"],
-                "color": "#4D4D4D",
-            },
-            medianprops={
-                "linewidth": PLOT_CONFIG["median_linewidth"],
-                "color": "#1F1F1F",
+        fill_color = COLORS.get(algo, "#CFCFCF")
+        ax.bar(
+            positions_by_scale,
+            mean_values,
+            width=PLOT_CONFIG["bar_width"],
+            yerr=std_values,
+            capsize=PLOT_CONFIG["error_cap_size"],
+            color=fill_color,
+            edgecolor="none",
+            error_kw={
+                "elinewidth": PLOT_CONFIG["error_linewidth"],
+                "ecolor": "#555555",
             },
         )
-
-        fill_color = COLORS.get(algo, "#CFCFCF")
-        for patch in boxplot["boxes"]:
-            patch.set_facecolor(fill_color)
 
         legend_handles.append(Patch(facecolor=fill_color, edgecolor="none", label=algo))
 
@@ -546,9 +549,9 @@ def main() -> None:
         if text.get_text() == "OURS":
             text.set_fontweight("bold")
 
-    if all_box_values:
-        y_min = min(all_box_values)
-        y_max = max(all_box_values)
+    if all_bar_values:
+        y_min = min(all_bar_values)
+        y_max = max(all_bar_values)
         y_margin = (y_max - y_min) * 0.12 if y_max > y_min else 0.1
         ax.set_ylim(y_min - y_margin, y_max + y_margin)
 

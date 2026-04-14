@@ -19,22 +19,37 @@ RAW_DATA_CANDIDATES = [
 OUTPUT_PNG = BASE_DIR / "exp5_resource_scan.png"
 OUTPUT_EPS = BASE_DIR / "exp5_resource_scan.eps"
 
-# --------------- style ---------------
+# ============ 绘图配置（可直接调参） ============
 PLOT_CONFIG = {
-    "fig_size": (7, 5),
-    "linewidth": 2,
-    "markersize": 7,
-    "xlabel_fontsize": 14,
-    "ylabel_fontsize": 14,
-    "tick_labelsize": 12,
-    "legend_fontsize": 11,
-    "legend_framealpha": 1.0,
-    "legend_edgecolor": "#FFFFFF",
-    "legend_facecolor": "#F8F8F8",
-    "grid_linewidth": 0.8,
-    "grid_color": "#EBEBEB",
-    "dpi": 300,
+    "fig_size": (7, 4.5),  # 图表尺寸 (宽, 高)
+    "linewidth": 2.0,  # 线条宽度
+    "markersize": 7,  # 标记大小
+    "line_style": "--",  # 线型
+    "line_markevery": None,  # 标记抽样步长；None 表示每个点都画
+    "xlabel_fontsize": 18,  # x 轴标签字号
+    "ylabel_fontsize": 18,  # y 轴标签字号
+    "xlabel_labelpad": 4,  # x 轴标签与轴的间距
+    "ylabel_labelpad": 4,  # y 轴标签与轴的间距
+    "ylabel_x": None,  # y 轴标签横向位置；如 -0.06。None 表示自动
+    "tick_labelsize": 17,  # 坐标轴刻度字号
+    "legend_fontsize": 15,  # 图例字号
+    "legend_loc": "best",  # 图例位置
+    "legend_framealpha": 1.0,  # 图例背景透明度
+    "legend_edgecolor": "#FFFFFF",  # 图例边框颜色
+    "legend_facecolor": "#F8F8F8",  # 图例背景颜色
+    "grid_linewidth": 0.8,  # 网格线宽度
+    "grid_color": "#EBEBEB",  # 网格线颜色
+    "show_errorbar": False,  # 是否显示置信区间误差棒
+    "error_capsize": 0.0,  # 误差棒端帽长度
+    "error_elinewidth": 0.0,  # 误差棒线宽
+    "dpi": 300,  # 输出图片 dpi
     "ci_zscore": 1.96,
+    "use_manual_margins": False,  # True 时启用下方边距参数
+    "left_margin": 0.10,
+    "right_margin": 0.98,
+    "top_margin": 0.96,
+    "bottom_margin": 0.14,
+    "wspace": 0.25,
 }
 
 COLORS = {
@@ -193,6 +208,12 @@ def _apply_shifts(df: pd.DataFrame, metric: str) -> pd.DataFrame:
     return plot_df
 
 
+def _setup_ticks(ax) -> None:
+    ax.tick_params(axis="both", labelsize=PLOT_CONFIG["tick_labelsize"])
+    for tick_label in ax.get_xticklabels() + ax.get_yticklabels():
+        tick_label.set_fontname("Times New Roman")
+
+
 def main() -> None:
     data_path = _resolve_raw_data_path()
     df = pd.read_csv(data_path)
@@ -255,31 +276,39 @@ def main() -> None:
             if not valid.any():
                 continue
 
+            yerr_values = ci[valid] if PLOT_CONFIG["show_errorbar"] else 0
+
             ax.errorbar(
                 np.array(available_factors)[valid],
                 means[valid],
-                yerr=0,
+                yerr=yerr_values,
                 label=algo,
                 color=COLORS.get(algo, "#5A5A5A"),
                 marker=MARKERS.get(algo, "o"),
                 linewidth=PLOT_CONFIG["linewidth"],
                 markersize=PLOT_CONFIG["markersize"],
-                capsize=0,
-                elinewidth=0,
+                capsize=PLOT_CONFIG["error_capsize"],
+                elinewidth=PLOT_CONFIG["error_elinewidth"],
                 markeredgewidth=0.0,
-                linestyle="--",
+                linestyle=PLOT_CONFIG["line_style"],
+                markevery=PLOT_CONFIG["line_markevery"],
             )
 
         ax.set_xlabel(
             "Resource Factor",
             fontsize=PLOT_CONFIG["xlabel_fontsize"],
             fontname="Times New Roman",
+            labelpad=PLOT_CONFIG["xlabel_labelpad"],
         )
         ax.set_ylabel(
             ylabel,
             fontsize=PLOT_CONFIG["ylabel_fontsize"],
             fontname="Times New Roman",
+            labelpad=PLOT_CONFIG["ylabel_labelpad"],
         )
+        if PLOT_CONFIG["ylabel_x"] is not None:
+            ax.yaxis.set_label_coords(float(PLOT_CONFIG["ylabel_x"]), 0.5)
+
         ax.set_xticks(available_factors)
         ax.set_xticklabels([str(f) for f in available_factors])
         ax.grid(
@@ -287,24 +316,33 @@ def main() -> None:
             color=PLOT_CONFIG["grid_color"],
             linewidth=PLOT_CONFIG["grid_linewidth"],
         )
-        ax.tick_params(axis="both", labelsize=PLOT_CONFIG["tick_labelsize"])
-        for tl in ax.get_xticklabels() + ax.get_yticklabels():
-            tl.set_fontname("Times New Roman")
+        _setup_ticks(ax)
 
     legend = axes[-1].legend(
-        loc="best",
+        loc=PLOT_CONFIG["legend_loc"],
         fontsize=PLOT_CONFIG["legend_fontsize"],
+        framealpha=PLOT_CONFIG["legend_framealpha"],
         prop={
             "family": "Times New Roman",
             "size": PLOT_CONFIG["legend_fontsize"],
         },
-        frameon=False,
     )
+    legend.get_frame().set_edgecolor(PLOT_CONFIG["legend_edgecolor"])
+    legend.get_frame().set_facecolor(PLOT_CONFIG["legend_facecolor"])
     for text in legend.get_texts():
         if text.get_text() == "OURS":
             text.set_fontweight("bold")
 
     plt.tight_layout()
+    if PLOT_CONFIG["use_manual_margins"]:
+        plt.subplots_adjust(
+            left=PLOT_CONFIG["left_margin"],
+            right=PLOT_CONFIG["right_margin"],
+            top=PLOT_CONFIG["top_margin"],
+            bottom=PLOT_CONFIG["bottom_margin"],
+            wspace=PLOT_CONFIG["wspace"],
+        )
+
     plt.savefig(OUTPUT_PNG, dpi=PLOT_CONFIG["dpi"], bbox_inches="tight")
     plt.savefig(OUTPUT_EPS, format="eps", bbox_inches="tight")
     print(

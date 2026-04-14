@@ -146,6 +146,15 @@ colors = {
     "OURS": "#FA7F6F",  # soft pink
 }
 
+colors = {
+    "RLS": "#EEC994",
+    "FFD": "#AFDEF3",
+    "DRS": "#FFE6B7",
+    "LEGO": "#A5A3C3",
+    "OURS": "#F67B7C",
+}
+
+
 markers = {
     "CDS": "o",
     "DRS": "s",

@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2026.1.14)  14 APR 2026 16:36
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2026.1.14)  14 APR 2026 20:03
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -294,11 +294,6 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
 
 
-Underfull \hbox (badness 2744) in paragraph at lines 47--48
-[]\OT1/ptm/m/n/10 We en-hance an ultra-fast ZCP to elim-i-nate time-
- []
-
-
 
 [1{d:/Item/work/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{d:/Item/work/texlive/2025/texmf-dist/fonts/enc/dvips/base/8r.enc}
 
@@ -314,62 +309,62 @@ Package pdftex.def Info: fig/CE-FIG1-Method.png  used on input line 83.
 
 [2]
 
-<fig/main_ar.png, id=24, 1293.633pt x 342.5598pt>
-File: fig/main_ar.png Graphic file (type png)
-<use fig/main_ar.png>
-Package pdftex.def Info: fig/main_ar.png  used on input line 103.
-(pdftex.def)             Requested size: 516.0pt x 136.63467pt.
 
 
 [3 <./fig/CE-FIG1-Method.png>]
-
-
-
-[4 <./fig/main_ar.png>]
-Underfull \hbox (badness 10000) in paragraph at lines 161--162
+Underfull \hbox (badness 10000) in paragraph at lines 120--121
 [] []\OT1/ptm/m/n/10 Supernet can-di-date set $\OMS/cmsy/m/n/10 A$\OT1/ptm/m/n/10 , tran-sient state
  []
 
 
-Underfull \hbox (badness 5490) in paragraph at lines 161--162
+Underfull \hbox (badness 5490) in paragraph at lines 120--121
 \OML/cmm/m/it/10 M[]\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 t\OT1/cmr/m/n/10 )\OML/cmm/m/it/10 ; ^^U[]\OT1/cmr/m/n/10 (\OML/cmm/m/it/10 t\OT1/cmr/m/n/10 )$\OT1/ptm/m/n/10 , SLA bound $\OML/cmm/m/it/10 T[]$\OT1/ptm/m/n/10 , safe thresh-old
  []
 
 
-Underfull \hbox (badness 3058) in paragraph at lines 166--167
+Underfull \hbox (badness 3058) in paragraph at lines 125--126
 [] []\OT1/ptm/m/n/10 Extract phys-i-cal at-tributes to form tu-ple $\OML/cmm/m/it/10 a[] \OT1/cmr/m/n/10 =
  []
 
-<fig/main_lv.png, id=35, 859.2903pt x 342.3189pt>
+
+
+<fig/main_ar.png, id=28, 1293.633pt x 342.5598pt>
+File: fig/main_ar.png Graphic file (type png)
+<use fig/main_ar.png>
+Package pdftex.def Info: fig/main_ar.png  used on input line 176.
+(pdftex.def)             Requested size: 516.0pt x 136.63467pt.
+<fig/main_lv.png, id=29, 859.2903pt x 342.3189pt>
 File: fig/main_lv.png Graphic file (type png)
 <use fig/main_lv.png>
-Package pdftex.def Info: fig/main_lv.png  used on input line 198.
+Package pdftex.def Info: fig/main_lv.png  used on input line 185.
 (pdftex.def)             Requested size: 252.0pt x 100.38773pt.
-<fig/scale_fitness.png, id=36, 509.9853pt x 295.5843pt>
+
+
+[4]
+
+
+
+[5 <./fig/main_ar.png> <./fig/main_lv.png>]
+<fig/scale_fitness.png, id=41, 497.6994pt x 281.1303pt>
 File: fig/scale_fitness.png Graphic file (type png)
 <use fig/scale_fitness.png>
-Package pdftex.def Info: fig/scale_fitness.png  used on input line 205.
-(pdftex.def)             Requested size: 217.39066pt x 126.0pt.
-<fig/exp5_resource_scan.png, id=37, 498.4221pt x 353.6412pt>
+Package pdftex.def Info: fig/scale_fitness.png  used on input line 220.
+(pdftex.def)             Requested size: 252.0pt x 142.34502pt.
+<fig/exp5_resource_scan.png, id=42, 497.9403pt x 318.7107pt>
 File: fig/exp5_resource_scan.png Graphic file (type png)
 <use fig/exp5_resource_scan.png>
-Package pdftex.def Info: fig/exp5_resource_scan.png  used on input line 212.
-(pdftex.def)             Requested size: 177.58372pt x 126.0pt.
-
-
-
-
-[5 <./fig/main_lv.png> <./fig/scale_fitness.png> <./fig/exp5_resource_scan.png>]
-<fig/exp6_dynamic_adaptation.png, id=47, 719.3274pt x 424.9476pt>
+Package pdftex.def Info: fig/exp5_resource_scan.png  used on input line 229.
+(pdftex.def)             Requested size: 252.0pt x 161.29047pt.
+<fig/exp6_dynamic_adaptation.png, id=43, 719.3274pt x 426.1521pt>
 File: fig/exp6_dynamic_adaptation.png Graphic file (type png)
 <use fig/exp6_dynamic_adaptation.png>
-Package pdftex.def Info: fig/exp6_dynamic_adaptation.png  used on input line 238.
-(pdftex.def)             Requested size: 252.0pt x 148.87004pt.
+Package pdftex.def Info: fig/exp6_dynamic_adaptation.png  used on input line 242.
+(pdftex.def)             Requested size: 252.0pt x 149.292pt.
+ (./globecom.bbl
 
 
-(./globecom.bbl
 
-[6 <./fig/exp6_dynamic_adaptation.png>])
+[6 <./fig/scale_fitness.png> <./fig/exp5_resource_scan.png> <./fig/exp6_dynamic_adaptation.png>])
 
 ** Conference Paper **
 Before submitting the final camera ready copy, remember to:
@@ -394,15 +389,15 @@ L3 programming layer <2025-01-18>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 4463 strings out of 475117
- 70490 string characters out of 5763929
- 479560 words of memory out of 5000000
- 27421 multiletter control sequences out of 15000+600000
+ 4464 strings out of 475117
+ 70496 string characters out of 5763929
+ 482116 words of memory out of 5000000
+ 27422 multiletter control sequences out of 15000+600000
  601214 words of font info for 125 fonts, out of 8000000 for 9000
  36 hyphenation exceptions out of 8191
  57i,11n,65p,1689b,477s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx7.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi5.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy5.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/urw/times/utmb8a.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/urw/times/utmbi8a.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/urw/times/utmr8a.pfb><d:/Item/work/texlive/2025/texmf-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on globecom.pdf (7 pages, 2126164 bytes).
+Output written on globecom.pdf (7 pages, 2128636 bytes).
 PDF statistics:
  132 PDF objects out of 1000 (max. 8388607)
  74 compressed objects within 1 object stream

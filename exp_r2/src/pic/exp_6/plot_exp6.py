@@ -29,14 +29,14 @@ DATA_PATH = os.path.join(CURRENT_DIR, "results", "exp6_dynamic_adaptation_summar
 # ============ 绘图配置 ============
 PLOT_CONFIG = {
     "fig_size": (10, 6),  # 图表尺寸 (宽, 高)
-    "linewidth": 1.5,  # 线条宽度
-    "markersize": 5,  # 标记大小
-    "load_markersize": 2,  # Load Factor 子图黑点大小（建议 2~4）
-    "xlabel_fontsize": 20,  # x 轴标签字号
+    "linewidth": 2.5,  # 线条宽度
+    "markersize": 6,  # 标记大小
+    "load_markersize": 3,  # Load Factor 子图黑点大小（建议 2~4）
+    "xlabel_fontsize": 22,  # x 轴标签字号
     "ylabel_fontsize": 20,  # y 轴标签字号
     "ylabel_x": -0.05,  # 两个子图 y 轴标签统一的横向位置（用于对齐）
     "title_fontsize": 16,  # 标题字号（当前图未显式使用）
-    "tick_labelsize": 18,  # 坐标轴刻度数字字号
+    "tick_labelsize": 20,  # 坐标轴刻度数字字号
     "legend_fontsize": 15,  # 图例字号
     "legend_framealpha": 1.0,  # 图例背景透明度
     "legend_edgecolor": "#FFFFFF",  # 图例边框颜色
@@ -66,7 +66,7 @@ DISPLAY_LABELS = {
     "ffd-m": "FFD",
     "lego": "LEGO",
     "drs": "DRS",
-    "random-m": "RANDOM",
+    "random-m": "RLS",
 }
 
 COLORS = {

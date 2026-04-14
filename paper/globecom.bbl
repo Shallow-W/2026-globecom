@@ -65,4 +65,7 @@ M.~S. Abdelfattah, A.~Mehrotra, {\L}.~Dudziak, and N.~D. Lane, ``Zero-cost proxi
 \bibitem{GSTC}
 Y.~Yang, J.~Lu, Z.~Jing, L.~Wang, D.~Han, M.~Hu, and K.~Peng, ``A zero-cost proxy model for nas based on information quantity quantization encoding,'' \emph{Expert Systems with Applications}, vol. 307, p. 130989, 2026.
 
+\bibitem{lego}
+Y.~Yu, J.~Yang, C.~Guo, H.~Zheng, and J.~He, ``Joint optimization of service request routing and instance placement in the microservice system,'' \emph{Journal of Network and Computer Applications}, vol. 147, p. 102441, 2019.
+
 \end{thebibliography}

@@ -28,7 +28,7 @@ email address or ORCID}
 \maketitle
 
 \begin{abstract}
-Edge AI services are increasingly deployed as microservices, but practical cloud-edge systems face two coupled challenges: rapidly changing traffic and tight, time-varying node resources. Existing deployment methods usually rely on fixed model pools and static scheduling, which limits adaptation under bursty loads. This paper proposes a cloud-edge collaborative deployment framework that combines zero-cost architecture evaluation with dynamic heuristic scheduling. A pre-trained supernet is maintained in the cloud, while edge nodes perform lightweight candidate scoring and on-demand model reloading. The scheduler first applies hard resource filtering based on transient memory and compute limits, then performs adaptive utility optimization with traffic-aware penalty weights to balance service quality and latency. Extensive experiments under perturbation, scale variation, resource-factor scanning, and dynamic non-stationary conditions show consistent benefits. Compared with representative baselines, the proposed method achieves substantially lower end-to-end delay, higher effective resource utilization at low load, and more stable performance under stressed states. The results validate that dynamic model switching with cloud-edge decoupling is an effective strategy for robust real-time Edge AI service deployment.
+Deploying AI models as microservices at the network edge faces an inherent conflict: the demand for high-quality, real-time inference versus the reality of strictly constrained, highly volatile node resources and bursty traffic. To address these dynamics, existing deployment strategies either rely on static model pools that lack agility or utilize Neural Architecture Search (NAS) to customize hardware-aware models. However, conventional NAS is computationally prohibitive for real-time, on-device model evaluation and dynamic switching. To bridge this gap, this paper proposes a novel cloud-edge collaborative framework that empowers edge nodes with millisecond-level, on-demand model switching capabilities. By decoupling heavy architecture training from a cloud-hosted supernet, our method leverages an enhanced Zero-Cost Proxy (ZCP) method for ultra-fast, lightweight candidate evaluation directly on edge nodes. Furthermore, we design a state-driven dynamic heuristic scheduler that strictly enforces transient memory and compute limits while adaptively balancing inference accuracy and service latency via traffic-aware penalty reweighting. Extensive experiments demonstrate that our framework significantly outperforms representative baselines in end-to-end latency, resource utilization, and robustness under varied traffic perturbations and dynamic resource conditions, validating real-time state-driven orchestration as a highly effective paradigm for resilient Edge AI.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -40,12 +40,12 @@ With the rapid advancement of the Internet of Things (IoT) and 5G/6G communicati
 
 To provide high-performance AI services adapted to the physical constraints of edge nodes, existing cloud-edge orchestration schemes typically focus on jointly optimizing microservice deployment and request routing. For instance, some works emphasize energy-delay trade-offs in resource-constrained edge environments \cite{Energy-Delay-Aware, Energy-Aware}, while others explore service mesh orchestration for large-scale and symmetric cloud systems \cite{Large-Scale, Symmetric}. Furthermore, collaborative routing strategies have been proposed to handle dynamic call graphs and fluctuating traffic \cite{Collaborative}. However, these approaches often assume static AI models and frequently treat AI services simply as fixed microservices \cite{Hybrid}, neglecting their architectural adaptability under varying resources. While Neural Architecture Search (NAS) \cite{NASsurvey} and supernet paradigms \cite{OFA, slimmable} offer massive candidate subnets to overcome this, they suffer from severe response lag in online environments due to computationally expensive gradient-based evaluations. To circumvent this overhead, current frameworks often degrade to static matching based on offline finite model pools. However, these coarse-grained pools struggle to handle time-varying bursty traffic, failing to balance queueing delay and inference accuracy. Although Zero-Cost Proxies (ZCP) \cite{ZCP, GSTC} enable millisecond-level accuracy quantification, they remain confined to the pure architecture search domain. Crucially, they lack effective coupling with system-level dynamic microservice reloading, hard physical constraints, and queueing dynamics.
 
-To address the conflict between the prohibitively high search overhead and the requirement for dynamic edge deployment, this paper proposes a cloud-edge collaborative deployment framework based on ZCP and dynamic scheduling. Specifically, this framework pre-trains a SuperNet offline in the cloud, while the edge triggers on-demand sampling and rapid evaluation mechanisms upon encountering traffic fluctuations. Leveraging ZCP, the system quantifies the accuracy potential and physical overhead of candidate subnets at the millisecond level. Building upon this, the edge scheduler executes hard-constraint filtering based on the transient available memory and computational upper bounds, and utilizes a dynamic heuristic algorithm to sense traffic variations, thereby adaptively adjusting the weights of soft constraints. Ultimately, the edge selects the optimal subnet and fetches its corresponding weights from the cloud on demand to complete rapid hot-reload deployment.
+To address the conflict between the prohibitively high search overhead and the requirement for dynamic edge deployment, this paper proposes a cloud-edge collaborative deployment framework based on ZCP and dynamic scheduling. Specifically, this framework pre-trains a SuperNet offline in the cloud, and upon encountering traffic fluctuations, the edge triggers on-demand sampling and rapid evaluation mechanisms. Leveraging ZCP, the system quantifies the accuracy potential and physical overhead of candidate subnets at the millisecond level. Building on this, the edge scheduler applies hard-constraint filtering based on transient available memory and computational upper bounds, and uses a dynamic heuristic algorithm to detect traffic variations, thereby adaptively adjusting the weights of soft constraints. Ultimately, the edge selects the optimal subnet and fetches its corresponding weights from the cloud on demand to complete rapid hot-reload deployment.
 
 The main contributions of this paper are summarized as follows:
 \begin{itemize}
-\item We enhance an ultra-fast ZCP to eliminate time-consuming backpropagation, effectively decoupling architecture evaluation from the scheduling process. This enables millisecond-level performance estimations on edge nodes, saving critical time for model transmission and reloading.
-\item We propose a hard-constraint-driven dynamic heuristic scheduling algorithm. It filters subnets via real-time memory and compute limits, and adaptively tunes soft constraints based on concurrent traffic. This ensures proper degradation and sustains overall throughput during traffic bursts.
+\item We enhance a fast ZCP method to meet the demands of edge scenarios, effectively decoupling the architecture search from the online deployment process. This enables millisecond-level performance estimations on edge nodes, saving critical time for model transmission and reloading.
+\item We propose a hard-constraint-driven dynamic heuristic scheduling algorithm. It filters subnets via real-time memory and compute limits, and adaptively tunes soft constraints based on traffic. This ensures proper degradation and sustains overall throughput during traffic bursts.
 \item We construct a cloud-edge decoupled lightweight deployment process. Edge nodes run only a minimal ZCP and parser to fetch subnets on demand. This eliminates local supernet storage, significantly reducing resource burdens while maintaining high service availability.
 \end{itemize}
 
@@ -83,13 +83,14 @@ Here, the objective function \eqref{eq:opt_obj} aims to maximize the accuracy po
 \includegraphics[width=\columnwidth]{fig/CE-FIG1-Method.png}
 \caption{System architecture of the proposed cloud-edge collaborative deployment framework based on ZCP and dynamic scheduling. The cloud center pre-trains the supernet offline, while the edge node relies on traffic sensing and resource monitoring to perform online ZCP evaluation and heuristic scheduling, ultimately reloading the optimal subnet on demand.}
 \label{fig:framework}
+\vspace{-10pt}
 \end{figure}
 
 \section{ONLINE ZERO-COST ARCHITECTURE EVALUATION}
 
 To enable the cloud-edge collaborative pipeline of ``edge search, cloud delivery, and edge deployment'' to meet strict real-time requirements, the system must perform ultra-fast multi-dimensional attribute evaluation of candidate architectures at the edge, thereby generating the attribute tuple $a_k = \langle S_k^{proxy}, P_k^{model}, F_k^{flops} \rangle$ that encapsulates accuracy potential and resource overhead. Since the computation volume ($F_k^{flops}$) and parameter size ($P_k^{model}$) of the candidate subnet $a_k$ are constant values once its operator-level topology is determined, the edge scheduler only needs to conduct a lightweight static topology traversal with $\mathcal{O}(L)$ complexity to deterministically obtain these two physical overhead features. Therefore, this section primarily focuses on how to circumvent expensive online gradient training and achieve accurate model accuracy potential evaluation ($S_k^{proxy}$) tailored to heterogeneous edge scenarios under ultra-low latency.
 
-Traditional zero-cost proxies often adopt static, unified metrics, making it difficult to adapt to the complex and variable hardware constraints and traffic fluctuations in edge computing environments. To this end, this framework introduces the GSTC proxy model \cite{GSTC} as the zero-cost proxy and proposes a dynamic adaptation mechanism tailored for heterogeneous edge states.
+Traditional ZCP methods often adopt static, unified metrics, making it difficult to adapt to the complex and variable hardware constraints and traffic fluctuations in edge computing environments. To this end, this framework introduces the GSTC proxy model \cite{GSTC} and proposes a dynamic adaptation mechanism tailored for heterogeneous edge states.
 
 After the edge scheduler generates the Directed Acyclic Graph (DAG) for the candidate subnet $a_k$, the evaluator utilizes the locally cached operator information retention rate ($\eta$) to efficiently extract four fundamental physical quantities characterizing the information flow of the network topology: the total architectural path information $G$, the path information difference $S$, the total information received by the output node $T$, and the information difference received by the output node $C$. To ensure that the proxy evaluation naturally aligns with the transient resource constraints and service demands of the current edge node, the system dynamically allocates weights $(\alpha, \beta, \gamma, \delta)$ to each component, or even performs dimensional pruning, to calculate a customized proxy score:
 \begin{equation}
@@ -98,61 +99,19 @@ S_k^{proxy} = \alpha \cdot G + \beta \cdot S + \gamma \cdot \widehat{T} + \delta
 \end{equation}
 where $\widehat{T}$ and $\widehat{C}$ are min-max normalized terms based on the upper and lower bounds of the global search space. Thanks to the high scalability of this evaluation mechanism, the scheduler can dynamically map to the most suitable evaluation scheme based on the node's real-time multi-dimensional states. The following lists three of the most representative typical scenarios:
 
-\begin{figure*}[tbp]
-\centering
-\includegraphics[width=\textwidth]{fig/main_ar.png}
-\caption{Average end-to-end latency under three perturbation axes: (a) arrival rate, (b) number of request types, and (c) request chain length.}
-\label{fig:delay}
-\end{figure*}
-
 \textbf{Low-Latency \& Resource-Constrained Scheme:} 
-When edge nodes face extreme physical resource constraints or are experiencing peak concurrent traffic, complex network topologies, despite enhancing information difference, can lead to severe memory fragmentation and unpredictable memory access latency. In such cases, the system triggers a dimensionality reduction and pruning strategy, setting the weights of the structural difference terms to zero (i.e., $\beta = \delta = 0$) and potentially introducing a negative decay penalty to the total information $G$. This scheme eliminates the incentive mechanism for network complexity, guiding the scheduler from the evaluation source to favor candidate architectures with shallower layers and simpler topologies, thereby maximizing the system throughput and overload resistance.
+When edge nodes face extreme physical resource constraints or are experiencing peak concurrent traffic, complex network topologies, despite enhancing information difference, can lead to higher memory requirements. In such cases, the system triggers a dimensionality reduction and pruning strategy, reducing the weights of the structural difference terms and potentially introducing a negative decay penalty to the total information $G$. This scheme guides the scheduler from the evaluation source to favor candidate architectures with shallower layers and simpler topologies, thereby maximizing the system throughput and overload resistance.
 
 \textbf{High-Accuracy \& Relaxed-Latency Scheme:} 
-For nodes with relatively abundant computational resources and stringent requirements for inference accuracy, the primary optimization objective shifts to enhancing the representation capability of the model. The physical quantities $G$ and $\widehat{T}$ are highly positively correlated with the network depth and feature extraction capacity. Therefore, the system assigns exceptionally high weight factors to the total information and the output information (i.e., $\alpha, \gamma \gg 1$). This scheme can capture high-complexity subnets within the search space that exhibit lossless information flow and extremely deep hierarchical structures, ensuring the maximum utilization of the underlying hardware computational capacity within resource constraints to trade off ultimate accuracy.
+For nodes with relatively abundant computational resources and stringent requirements for inference accuracy, the primary optimization objective shifts to enhancing the representation capability of the model. The physical quantities $G$ and $\widehat{T}$ are highly positively correlated with the network depth and feature extraction capacity. Therefore, the system assigns higher weight factors to the total information and the output information. This scheme can capture high-complexity subnets within the search space that exhibit lossless information flow and extremely deep hierarchical structures, ensuring the maximum utilization of the underlying hardware computational capacity within resource constraints to trade off ultimate accuracy.
 
 \textbf{Balanced Robust Scheme:} 
-When node resources and traffic are in a steady state, the system adopts the full set of evaluation components with balanced weights ($\alpha=\beta=\gamma=\delta=1$). This scheme jointly considers network depth (characterized by $G$ and $T$) and the diversity of residual structures (characterized by $S$ and $C$), achieving an optimal comprehensive trade-off between theoretical accuracy potential and structural redundancy to provide a highly robust normalized candidate set.
+When node resources and traffic are in a steady state, the system adopts the full set of evaluation components with balanced weights. This scheme jointly considers network depth (characterized by $G$ and $T$) and the diversity of residual structures (characterized by $S$ and $C$), achieving an optimal comprehensive trade-off between theoretical accuracy potential and structural redundancy to provide a highly robust normalized candidate set.
 
-Through the aforementioned dynamic adaptation mechanism, the system ingeniously pre-decouples the computationally heavy online joint optimization problem. Edge nodes can generate a multi-dimensional set of candidate architectures within milliseconds that not only comply with physical constraints but also possess topological characteristics naturally suited to transient traffic scenarios. This process secures a substantial time margin for the subsequent on-demand fetching of models from the cloud.
-
-
+Through the aforementioned dynamic adaptation mechanism, the system decomposes the computationally heavy online joint optimization problem. Edge nodes can generate a multi-dimensional set of candidate architectures within milliseconds that not only comply with physical constraints but also possess topological characteristics naturally suited to transient traffic scenarios. This process secures a substantial time margin for the subsequent on-demand fetching of models from the cloud.
 
 \section{CLOUD-EDGE COLLABORATIVE HEURISTIC DEPLOYMENT}
-Upon triggering a scheduling event, the edge scheduler first evaluates the transient resource state (e.g., $M_{i}^{max}(t)$) and concurrent traffic $\lambda_{i}(t)$ to dynamically configure the GSTC proxy weights $(\alpha, \beta, \gamma, \delta)$ according to the context-aware schemes outlined in Section III. By executing this lightweight static topology traversal, the system generates the customized accuracy potential score $S_{k}^{proxy}$ for each candidate. Based on these extracted context-aware attributes, the edge scheduler then executes a dynamic deployment pipeline comprising three stages: hard-constraint filtering, heuristic weighted selection, and on-demand fetching. This two-tier dynamic mechanism copes with bursty traffic micro-states and realizes fine-grained adaptive proper degradation.
-
-
-
-First, in the physical constraint filtering stage, the engine processes the candidate subnet set $\mathcal{A}$ in $\mathcal{O}(|\mathcal{A}|)$ time based on transient resource bounds. It eliminates subnets exceeding the memory limit ($P_k^{model} > M_i^{max}(t)$) to prevent Out-of-Memory (OOM) failures, and those violating the queueing computation limit ($F_k^{flops} > F_i^{max}(t)$) to strictly guarantee SLA delay boundaries under the transient arrival rate $\lambda_i(t)$. This safely prunes the global search space into a feasible real-time subset $\mathcal{A}_i^*(t)$.
-
-Subsequently, the process enters the dynamic heuristic degradation stage. To optimally trade off accuracy potential, inference latency, and memory footprint within $\mathcal{A}_i^*(t)$, we design a utility function based on Global Boundary Normalization:
-\begin{equation}
-\begin{aligned}
-U(a_k) = w_1(t) \cdot \widehat{S}_k^{proxy} - w_2(t) \cdot \widehat{F}_k^{flops} - w_3(t) \cdot \widehat{P}_k^{model}
-\label{eq:utility_function}
-\end{aligned}
-\end{equation}
-where $\widehat{(\cdot)}$ denotes min-max normalization over the entire cloud supernet to prevent local scale distortion, and $\widehat{S}_k^{proxy}$ is the theoretical accuracy score evaluated by our customized GSTC. To handle microscopic fluctuations, the penalty weights are dynamically driven by transient traffic $\lambda_i(t)$ and resource utilization:
-\begin{equation}
-\begin{aligned}
-    w_2(t) &= c_1 \cdot \exp\left( \max\left(0, \frac{\lambda_i(t) - \lambda_{th}}{\lambda_{th}}\right) \right), \\
-    w_3(t) &= c_2 \cdot \frac{M_{used}(t)}{M_{total}}
-\end{aligned}
-\label{eq:dynamic_weights}
-\end{equation}
-with the normalized accuracy weight $w_1(t) = \frac{1}{1 + w_2(t) + w_3(t)}$, where $\lambda_{th}$ is a pre-calibrated safe traffic threshold. This normalized weight distribution intrinsically forms a self-adaptive penalty mechanism. When traffic is stable ($\lambda_i(t) \le \lambda_{th}$), $w_2(t)$ remains constant, prioritizing the GSTC-evaluated accuracy. Conversely, during traffic bursts ($\lambda_i(t) > \lambda_{th}$), $w_2(t)$ grows exponentially, severely penalizing computation and suppressing $w_1(t)$. This proactively triggers system-level degradation, trading accuracy for lightweight architectures to sustain high throughput and service availability.
-
-Finally, in the on-demand fetching stage, the scheduler identifies the optimal subnet $a^* = \arg\max_{a_k \in \mathcal{A}_i^*(t)} U(a_k)$ and sends its Architecture Encoding to the cloud. The cloud server instantly slices the corresponding weights from the pre-trained supernet $\mathcal{W}$ and transmits them to the edge. By bypassing the massive gradient training overhead via the GSTC proxy, the entire ``search-decision-fetch'' duration is strictly compressed, enabling agile hot-reload microservice deployment within a tolerable time window.
-
-
-
-\section{EXPERIMENTAL ANALYSIS}
-
-\subsection{Experimental Settings}
-
-
-
-We pre-train a supernet offline and build a multi-task model library for online deployment. The default deployment uses $N=3$ edge nodes (scaled to 5 and 7 for the scalability study), with per-node capacity $C_i^{max}=200$ GFLOPS, memory budget $M_{total}=150$M parameters, and cross-node delay $\tau_{comm}=0.02$s. Traffic follows pipelined call chains of length 3--10, with arrival rates from 100 to 800 requests/s and per-chain rates sampled from a Dirichlet distribution ($\alpha=1$). We compare six baselines: First-Fit Decreasing (\textbf{FFD}), Chain-aware Deployment Scoring (\textbf{CDS}), Random Local Search (\textbf{RLS}), Greedy (\textbf{Greedy}), Dynamic Resource Scaling (\textbf{DRS}), and LEGO (\textbf{LEGO}). They use fixed models, while our method performs dynamic model selection under hard/soft constraints. Key settings for our method are 40 generations, population size 36, $\omega=5.0$, and QoS-delay tradeoff 1.2.
+Upon triggering a scheduling event, the edge scheduler first evaluates the transient resource state (e.g., $M_{i}^{max}(t)$) and concurrent traffic $\lambda_{i}(t)$ to dynamically configure the GSTC proxy weights $(\alpha, \beta, \gamma, \delta)$ according to the context-aware schemes outlined in Section III. By executing this lightweight static topology traversal, the system generates the customized accuracy potential score $S_{k}^{proxy}$ for each candidate on heterogeneous nodes. Based on these extracted context-aware attributes, the edge scheduler then executes a dynamic deployment pipeline comprising three stages: hard-constraint filtering, heuristic weighted selection, and on-demand fetching. This dynamic mechanism copes with bursty traffic micro-states and realizes fine-grained adaptive proper degradation, the specific process is as shown in Algorithm~\ref{alg:scheduling}.
 
 \begin{algorithm}
 \caption{Cloud-Edge Collaborative Dynamic Heuristic Scheduling}
@@ -187,69 +146,105 @@ We pre-train a supernet offline and build a multi-task model library for online 
 \end{algorithmic}
 \end{algorithm}
 
+First, in the physical constraint filtering stage, the engine processes the candidate subnet set $\mathcal{A}$ in $\mathcal{O}(|\mathcal{A}|)$ time based on transient resource bounds. It eliminates subnets exceeding the memory limit ($P_k^{model} > M_i^{max}(t)$) to prevent Out-of-Memory (OOM) failures, and those violating the queueing computation limit ($F_k^{flops} > F_i^{max}(t)$) to strictly guarantee SLA delay boundaries under the transient arrival rate $\lambda_i(t)$. This safely prunes the global search space into a feasible real-time subset $\mathcal{A}_i^*(t)$.
+
+Subsequently, the process enters the dynamic heuristic degradation stage. To optimally trade off accuracy potential, inference latency, and memory footprint within $\mathcal{A}_i^*(t)$, we design a utility function based on Global Boundary Normalization:
+\begin{equation}
+\begin{aligned}
+U(a_k) = w_1(t) \cdot \widehat{S}_k^{proxy} - w_2(t) \cdot \widehat{F}_k^{flops} - w_3(t) \cdot \widehat{P}_k^{model}
+\label{eq:utility_function}
+\end{aligned}
+\end{equation}
+where $\widehat{(\cdot)}$ denotes min-max normalization over the entire cloud supernet to prevent local scale distortion, and $\widehat{S}_k^{proxy}$ is the theoretical accuracy score evaluated by our customized GSTC. To handle microscopic fluctuations, the penalty weights are dynamically driven by transient traffic $\lambda_i(t)$ and resource utilization:
+\begin{equation}
+\begin{aligned}
+    w_2(t) &= c_1 \cdot \exp\left( \max\left(0, \frac{\lambda_i(t) - \lambda_{th}}{\lambda_{th}}\right) \right), \\
+    w_3(t) &= c_2 \cdot \frac{M_{used}(t)}{M_{total}}
+\end{aligned}
+\label{eq:dynamic_weights}
+\end{equation}
+with the normalized accuracy weight $w_1(t) = \frac{1}{1 + w_2(t) + w_3(t)}$, where $\lambda_{th}$ is a pre-calibrated safe traffic threshold. This normalized weight distribution intrinsically forms a self-adaptive penalty mechanism. When traffic is stable ($\lambda_i(t) \le \lambda_{th}$), $w_2(t)$ remains constant, prioritizing the GSTC-evaluated accuracy. Conversely, during traffic bursts ($\lambda_i(t) > \lambda_{th}$), $w_2(t)$ grows exponentially, severely penalizing computation and suppressing $w_1(t)$. This proactively triggers system-level degradation, trading accuracy for lightweight architectures to sustain high throughput and service availability.
+
+Finally, in the on-demand fetching stage, the scheduler identifies the optimal subnet $a^* = \arg\max_{a_k \in \mathcal{A}_i^*(t)} U(a_k)$ and sends its Architecture Encoding to the cloud. The cloud server instantly slices the corresponding weights from the pre-trained supernet $\mathcal{W}$ and transmits them to the edge. By bypassing the massive gradient training overhead via the GSTC proxy, the entire ``search-decision-fetch'' duration is strictly compressed, enabling agile hot-reload microservice deployment within a tolerable time window.
+
+\section{EXPERIMENTAL ANALYSIS}
+
+\subsection{Experimental Settings}
+
+\begin{figure*}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fig/main_ar.png}
+\vspace{-20pt}
+\caption{Average end-to-end latency under three perturbation axes: (a) arrival rate, (b) number of request types, and (c) request chain length.}
+\label{fig:delay}
+\vspace{-10pt}
+\end{figure*}
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\columnwidth]{fig/main_lv.png}
+\vspace{-20pt}
+\caption{Average memory utilization under two perturbation axes: (a) arrival rate and (b) number of request types.}
+\label{fig:mem_util}
+\vspace{-10pt}
+\end{figure}
+
+We pre-train a supernet offline and build a multi-task model library for online deployment. The default deployment uses $N=3$ edge nodes (scaled to 5 and 7 for the scalability study), with per-node capacity $C_i^{max}=200$ GFLOPS, memory budget $M_{total}=150$M parameters, and cross-node delay $\tau_{comm}=0.02$s. Traffic follows pipelined call chains of length 3--10, with arrival rates from 100 to 800 requests/s and per-chain rates sampled from a Dirichlet distribution ($\alpha=1$). We compare six baselines: First-Fit Decreasing (\textbf{FFD}), Chain-aware Deployment Scoring (\textbf{CDS}), Random Local Search (\textbf{RLS}), \textbf{Greedy}, Dynamic Resource Scaling (\textbf{DRS}), and \textbf{LEGO} \cite{lego}. They use fixed models, while our method performs dynamic model selection under hard/soft constraints. Key settings for our method are 40 generations, population size 36, $\omega=5.0$, and QoS-delay tradeoff 1.2.
+
 \subsection{Static Performance}
 
 We first report static-condition results from two aspects: end-to-end latency and resource utilization.
 
 \textbf{End-to-End Latency:} As traffic increases, the hard bound $F_i^{max}(t)$ in Eq.~\eqref{eq:dynamic_compute_limit} narrows the feasible compute region, and the scheduler naturally shifts to lighter subnets. Therefore, latency remains consistently below all baselines across the three perturbation axes in Fig.~\ref{fig:delay}. Under arrival-rate perturbation (Fig.~\ref{fig:delay}(a)), our latency grows much more slowly as load increases, while all baselines rise rapidly and remain at high levels. For example, at $\lambda=400$, our delay is 0.14\,s, about 93\% lower than the baseline mean (2.02\,s). Similar gaps are observed on the other two axes, where baseline methods also stay markedly higher. These gains come from adaptive subnet selection (Eq.~\eqref{eq:adaptive_gstc}) and dynamic penalty reweighting (Eq.~\eqref{eq:dynamic_weights}), which prioritize queue stability under heavy traffic.
 
-\begin{figure}[tbp]
-\centering
-\includegraphics[width=\columnwidth]{fig/main_lv.png}
-\caption{Average memory utilization under two perturbation axes: (a) arrival rate and (b) number of request types.}
-\label{fig:mem_util}
-\end{figure}
-
-\begin{figure}[tbp]
-\centering
-\includegraphics[height=0.5\columnwidth]{fig/scale_fitness.png}
-\caption{Fitness distribution under three network scales (Small: $N=3$, Medium: $N=5$, Large: $N=7$). Each box represents 100 independent trials.}
-\label{fig:scale}
-\end{figure}
-
-\begin{figure}[tbp]
-\centering
-\includegraphics[height=0.5\columnwidth]{fig/exp5_resource_scan.png}
-\caption{Average end-to-end latency under varying resource constraints.}
-\label{fig:exp5}
-\end{figure}
-
-
 \textbf{Resource Utilization:} Under the same static settings, Fig.~\ref{fig:mem_util} reflects a clear adaptive-deployment behavior. Under light load, our scheduler tends to select higher-accuracy subnets, so memory utilization is intentionally higher and edge resources are used more fully. For example, at $\lambda=200$, our utilization reaches 94\%. By contrast, fixed-model baselines often under-utilize memory at low load and then move close to saturation as load increases. This trend is consistent with Eq.~\eqref{eq:utility_function}, where low-load settings favor quality-oriented model choices and high-load settings increase resource penalties.
-
-
 
 \subsection{Scalability}
 
 We analyze scalability along two complementary dimensions: horizontal scaling and vertical scaling.
 
-\textbf{Horizontal Scaling:} We first evaluate performance changes when expanding the number of edge nodes under fixed load. As shown in Fig.~\ref{fig:scale}, three topologies are considered: Small ($N=3$), Medium ($N=5$), and Large ($N=7$). As scale increases, the network provides more aggregate resources, and the service quality of all methods improves accordingly. Even in this case, our method remains consistently better than all baselines, because it can dynamically switch to higher-accuracy models when resources are available. In terms of median fitness, our method achieves 2.41, 3.33, and 3.94 from Small to Large, while the best baseline reaches 1.74, 2.09, and 2.84, corresponding to relative gains of 38\%, 59\%, and 39\%, respectively.
+\textbf{Horizontal Scaling:} We first evaluate performance changes when expanding the number of edge nodes under fixed load. As shown in Fig.~\ref{fig:scale}, three topologies are considered: Small ($N=3$), Medium ($N=5$), and Large ($N=7$). As the scale increases, the network provides more aggregate resources, and the service quality of all methods improves accordingly. Even in this case, our method remains consistently better than all baselines, because it can dynamically switch to higher-accuracy models when resources are available. In terms of median fitness, our method achieves 2.41, 3.33, and 3.94 from Small to Large, while the best baseline reaches 1.74, 2.09, and 2.84, corresponding to relative gains of 38\%, 59\%, and 39\%, respectively.
 
-\textbf{Vertical Scaling:} We further quantify resource impact by using a unified resource factor to adjust per-node resource scale in Fig.~\ref{fig:exp5}. As the factor increases, available resources grow. Our method remains lower throughout, since it can dynamically deploy models that better match current resource conditions. At factor 0.5, our delay is about 1.46\,s, while baselines are around 3.2\,s, corresponding to an improvement of roughly 54\%. At factor 1.5, delays of all methods become close, indicating that resources are already abundant and the performance gap naturally narrows. This result is consistent with the horizontal-scaling experiment and confirms that adaptive model switching improves robustness under both topology and per-node resource variations.
-
-
+\textbf{Vertical Scaling:} We further quantify resource impact by using a unified resource factor to adjust per-node resource scale in Fig.~\ref{fig:exp5}. As the factor increases, available resources grow. Our method remains lower throughout, since it can dynamically deploy models that better match current resource conditions. At factor 0.5, our delay is about 1.46 s, while baselines are around 3.2 s, corresponding to an improvement of roughly 54\%. At factor 1.5, delays of all methods become close, indicating that resources are already abundant and the performance gap naturally narrows. This result is consistent with the horizontal-scaling experiment and confirms that adaptive model switching improves robustness under both topology and per-node resource variations.
 
 \subsection{Dynamic Adaptation}
 
-We further evaluate service capability under dynamic load conditions, as shown in Fig.~\ref{fig:exp6}. When the system enters stressed periods, delays of baseline methods increase sharply, while our curve stays consistently lower. At a representative high-load state, our delay is 1.28\,s, whereas all baselines remain above 1.8\,s. This indicates that our method can adjust deployment strategy according to dynamic environments, achieving stronger adaptability and better overall performance.
-
-\begin{figure}[tbp]
-\centering
-\includegraphics[width=\columnwidth]{fig/exp6_dynamic_adaptation.png}
-\caption{Dynamic adaptation performance over time-varying traffic and resource conditions.}
-\label{fig:exp6}
-\end{figure}
-
+We further evaluate service capability under dynamic load conditions, as shown in Fig.~\ref{fig:exp6}. When the system enters stressed periods, delays of baseline methods increase sharply, while our curve stays consistently lower. At a representative high-load state, our delay is 1.28 s, whereas all baselines remain above 1.8 s. This indicates that our method can adjust deployment strategy according to dynamic environments, achieving stronger adaptability and better overall performance.
 
 \section{CONCLUSION}
 
-This paper presented a cloud-edge collaborative deployment framework for delay-sensitive Edge AI microservices. By combining zero-cost architecture evaluation with dynamic heuristic scheduling, the framework enables fast online model selection and on-demand reloading under time-varying traffic and resource constraints. The hard-constraint filtering stage guarantees feasibility with respect to transient memory and compute limits, while adaptive penalty reweighting provides flexible quality-latency tradeoffs across load regimes.
+This paper proposed a cloud-edge collaborative framework integrating ZCP evaluation and dynamic heuristic scheduling to address the deployment of edge AI microservices under bursty traffic and strict resource constraints. By enhancing the ZCP method for heterogeneous edge states, our approach enables millisecond-level performance analysis of candidate models for nodes. Furthermore, a hard-constraint-driven scheduler adaptively reweights soft penalties based on transient traffic, guaranteeing system feasibility while optimally trading off inference accuracy and latency. Finally, an on-demand model reloading strategy avoids local supernet storage overhead. Extensive experiments demonstrate that our approach significantly outperforms representative baselines in end-to-end latency, resource utilization, and robustness across varied traffic perturbations, node scales, and dynamic resource conditions. These findings validate that real-time state-driven dynamic deployment is a highly effective paradigm for scalable Edge AI orchestration.
 
-Experimental results across multiple settings verified the effectiveness of the proposed method. Under perturbation tests, the method consistently reduced end-to-end latency compared with six baselines. Under low-load conditions, it utilized resources more effectively by selecting higher-quality models, and under stressed conditions it maintained better delay stability through adaptive re-deployment. Scale and resource-factor studies further showed robust gains when topology and available capacity changed. These findings indicate that dynamic deployment driven by real-time state is a practical and scalable direction for robust Edge AI service orchestration.
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\columnwidth]{fig/scale_fitness.png}
+\vspace{-20pt}
+\caption{Fitness distribution under three network scales (Small: $N=3$, Medium: $N=5$, Large: $N=7$). Each box represents 100 independent trials.}
+\label{fig:scale}
+\vspace{-10pt}
+\end{figure}
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\columnwidth]{fig/exp5_resource_scan.png}
+\vspace{-20pt}
+\caption{Average end-to-end latency under varying resource constraints.}
+\label{fig:exp5}
+\vspace{-10pt}
+\end{figure}
 
 \section*{ACKNOWLEDGMENT}
 
 The preferred spelling of the word ``acknowledgment'' in America is without an ``e'' after the ``g''. Avoid the stilted expression ``one of us (R. B. G.) thanks $\ldots$''. Instead, try ``R. B. G. thanks$\ldots$''. Put sponsor acknowledgments in the unnumbered footnote on the first page.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\columnwidth]{fig/exp6_dynamic_adaptation.png}
+\vspace{-20pt}
+\caption{Dynamic adaptation performance over time-varying traffic and resource conditions.}
+\label{fig:exp6}
+\vspace{-10pt}
+\end{figure}
 
 \bibliographystyle{IEEEtran}
 \bibliography{IEEEabrv,ref}
